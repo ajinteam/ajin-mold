@@ -41,7 +41,10 @@ class RestorePathMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope.get("type") in ("http", "websocket") and scope.get("path") in ("/api/index", "/api/index.py"):
+        qs_raw = scope.get("query_string", b"") or b""
+        if scope.get("type") in ("http", "websocket") and (
+            b"__path=" in qs_raw or scope.get("path") in ("/api/index", "/api/index.py")
+        ):
             from urllib.parse import parse_qsl, urlencode
 
             pairs = parse_qsl(scope.get("query_string", b"").decode("utf-8"), keep_blank_values=True)
