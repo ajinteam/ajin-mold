@@ -156,6 +156,46 @@
       }
       .label-title { font-weight: 800; font-size: 10.5pt; }
     }
+
+    /* 토스트 */
+    #toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      background: rgba(15,23,42,.92); color: #fff; padding: 10px 16px;
+      border-radius: 999px; font-size: 14px; z-index: 100; display: none;
+      max-width: 90vw; text-align: center;
+    }
+    /* ===== 모바일 최적화 ===== */
+    @media (max-width: 640px) {
+      .container { margin: 8px auto; padding: 0 8px 48px; }
+      header { padding: 10px 12px; }
+      .card { padding: 12px; border-radius: 12px; }
+      button { min-height: 46px; font-size: 15px; }
+      input, select, textarea { font-size: 16px; min-height: 46px; }
+      .big-actions { grid-template-columns: 1fr; gap: 8px; }
+      .row > * { flex: 1 1 100%; }
+      .row > button { flex: 1 1 100% !important; }
+      #headerControls { width: 100%; }
+      #headerControls > button { flex: 1 1 45% !important; min-height: 40px; font-size: 13px; }
+      .badge { display: inline-block; margin-top: 4px; font-size: 12px; }
+      table.resp thead { display: none; }
+      table.resp, table.resp tbody, table.resp tr, table.resp td { display: block; width: 100%; }
+      table.resp tr {
+        border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 10px;
+        margin-bottom: 10px; background: #fff;
+      }
+      table.resp td { border: 0; padding: 4px 0; font-size: 14px; }
+      table.resp td::before {
+        content: attr(data-label); display: inline-block; min-width: 76px;
+        color: var(--muted); font-size: 12px; font-weight: 600;
+      }
+      table.resp td.actions { padding-top: 8px; display: flex; gap: 8px; }
+      table.resp td.actions::before { display: none; }
+      table.resp td.actions button { flex: 1 1 50% !important; }
+      .photo-grid { grid-template-columns: repeat(2, 1fr); }
+      .photo-card img { height: 110px; }
+      #scannerCard #qrReader { max-width: 100%; }
+      .moldChk { width: 22px; height: 22px; min-height: 0; vertical-align: middle; }
+    }
   </style>
 </head>
 <body>
@@ -197,6 +237,10 @@
         <button class="primary big-btn" onclick="openScanner('move')">📷 QR 연속 스캔 · 이동</button>
         <button class="accent big-btn" onclick="openScanner('photo')">📸 QR 스캔 · 사진촬영</button>
         <button class="big-btn" onclick="stopScanner(); document.getElementById('searchInput').focus();">🔎 검색 (모델/아진/몰드/품명)</button>
+        <label class="big-btn" style="border:1px solid var(--border); background:#fff; cursor:pointer; display:block; font-weight:600;">
+          🖼️ 사진으로 QR 인식 (카메라 권한 없이)
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)" />
+        </label>
       </div>
 
       <!-- QR 카메라 스캐너 박스 -->
@@ -233,7 +277,7 @@
           <button class="primary" onclick="loadMolds()" style="flex:0 0 auto;">조회</button>
         </div>
         <div style="overflow-x:auto;">
-          <table>
+          <table class="resp">
             <thead>
               <tr>
                 <th>모델명</th>
@@ -267,10 +311,16 @@
         <hr />
         <div class="row" style="justify-content:space-between; margin:10px 0;">
           <strong>금형 사진 (업로드 날짜 최신순)</strong>
-          <label class="accent" style="padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; flex:0 0 auto;">
-            📷 사진 촬영/선택 (자동 압축)
-            <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="uploadPhoto(this)" />
-          </label>
+          <div style="display:flex; gap:8px; flex:0 0 auto; flex-wrap:wrap;">
+            <label class="accent" style="padding:10px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px;">
+              📷 촬영
+              <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="uploadPhoto(this)" />
+            </label>
+            <label class="accent" style="padding:10px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; background:#334155; border-color:#334155;">
+              🖼️ 앨범에서 선택
+              <input type="file" accept="image/*" style="display:none;" onchange="uploadPhoto(this)" />
+            </label>
+          </div>
         </div>
         <div id="photoList" class="photo-grid"></div>
 
@@ -283,9 +333,9 @@
     <!-- 2. PC 관리 · 엑셀 업로드 · BY-482BT 라벨 사이즈 조절 인쇄 -->
     <div id="tabPc" class="hidden">
       <div class="card">
-        <h3 style="margin-top:0;">엑셀 금형 리스트 업로드 (CPH-301E 등 기존 양식 호환)</h3>
+        <h3 style="margin-top:0;">엑셀 금형 리스트 업로드 (CPH-301E 등 기존 양식 호환, .xlsx만 가능)</h3>
         <div class="row">
-          <input id="excelFile" type="file" accept=".xlsx,.xls" />
+          <input id="excelFile" type="file" accept=".xlsx" />
           <button class="primary" onclick="uploadExcel()" style="flex:0 0 auto;">엑셀 업로드</button>
         </div>
       </div>
@@ -344,7 +394,7 @@
           <button class="primary" onclick="createUser()" style="flex:0 0 auto;">계정 생성</button>
         </div>
 
-        <table style="margin-top:14px;">
+        <table class="resp" style="margin-top:14px;">
           <thead>
             <tr>
               <th>아이디</th>
@@ -364,6 +414,7 @@
   </div>
 </div>
 
+<div id="toast"></div>
 <!-- 인쇄 전용 영역 -->
 <div id="printArea"></div>
 
@@ -375,6 +426,24 @@ let QUEUE = [];
 let CURRENT_DETAIL_MOLD_ID = null;
 let SCANNER_INSTANCE = null;
 let SCAN_MODE = "move";
+
+async function safeJson(res) {
+  try { return await safeJson(res); }
+  catch (e) {
+    return { detail: res.status === 413 ? "파일이 너무 큽니다 (서버 한도 4.5MB)."
+                     : res.status === 504 ? "서버 응답 시간 초과입니다. 잠시 후 다시 시도하세요."
+                     : "서버 오류 (" + res.status + ")" };
+  }
+}
+
+let _toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.style.display = "block";
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.style.display = "none"; }, 2200);
+}
 
 function authHeaders() {
   return { "Authorization": "Bearer " + TOKEN, "Content-Type": "application/json" };
@@ -388,7 +457,7 @@ async function doLogin() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password })
   });
-  const data = await res.json();
+  const data = await safeJson(res);
   if (!res.ok) return alert(data.detail || "로그인 실패");
   TOKEN = data.token;
   localStorage.setItem("mold_token", TOKEN);
@@ -406,7 +475,7 @@ async function initSession() {
   if (!TOKEN) return;
   const res = await fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + TOKEN } });
   if (!res.ok) { logout(); return; }
-  const data = await res.json();
+  const data = await safeJson(res);
   CURRENT_USER = data.user;
 
   document.getElementById("loginBox").classList.add("hidden");
@@ -441,7 +510,7 @@ function switchTab(tab) {
 
 async function loadLocations() {
   const res = await fetch("/api/locations", { headers: { "Authorization": "Bearer " + TOKEN } });
-  const data = await res.json();
+  const data = await safeJson(res);
   const locs = data.locations || [];
 
   const filterSel = document.getElementById("filterLoc");
@@ -471,7 +540,7 @@ async function loadMolds() {
   const res = await fetch("/api/molds?" + params.toString(), {
     headers: { "Authorization": "Bearer " + TOKEN }
   });
-  const data = await res.json();
+  const data = await safeJson(res);
   CURRENT_MOLDS = data.items || [];
   renderMoldTable();
 }
@@ -484,13 +553,13 @@ function renderMoldTable() {
   }
   tbody.innerHTML = CURRENT_MOLDS.map(m => `
     <tr>
-      <td><input type="checkbox" class="moldChk" value="${m.id}" /> <strong>${escapeHtml(m.model_name)}</strong></td>
-      <td>${escapeHtml(m.ajin_no)}</td>
-      <td>${escapeHtml(m.mold_no)}</td>
-      <td>${escapeHtml(m.part_description)} <span style="color:var(--muted)">${escapeHtml(m.dw_no || "")}</span></td>
-      <td><span class="pill">${escapeHtml(m.current_warehouse || "-")}</span></td>
-      <td>${escapeHtml(m.status_memo || "")} <small style="color:var(--muted)">(${escapeHtml(m.updated_by || "")})</small></td>
-      <td style="white-space:nowrap;">
+      <td data-label="모델명"><input type="checkbox" class="moldChk" value="${m.id}" /> <strong>${escapeHtml(m.model_name)}</strong></td>
+      <td data-label="아진No">${escapeHtml(m.ajin_no)}</td>
+      <td data-label="몰드No">${escapeHtml(m.mold_no)}</td>
+      <td data-label="품명">${escapeHtml(m.part_description)} <span style="color:var(--muted)">${escapeHtml(m.dw_no || "")}</span></td>
+      <td data-label="보관위치"><span class="pill">${escapeHtml(m.current_warehouse || "-")}</span></td>
+      <td data-label="메모">${escapeHtml(m.status_memo || "")} <small style="color:var(--muted)">(${escapeHtml(m.updated_by || "")})</small></td>
+      <td class="actions" style="white-space:nowrap;">
         <button onclick="addToQueue(${m.id})">+이동담기</button>
         <button onclick="openDetail(${m.id})">상세/사진</button>
       </td>
@@ -538,7 +607,7 @@ async function submitBulkMove() {
       memo: document.getElementById("bulkMemo").value.trim()
     })
   });
-  const data = await res.json();
+  const data = await safeJson(res);
   if (!res.ok) return alert(data.detail || "이동 실패");
   alert(data.message);
   document.getElementById("bulkMemo").value = "";
@@ -549,7 +618,7 @@ async function submitBulkMove() {
 async function openDetail(moldId) {
   CURRENT_DETAIL_MOLD_ID = moldId;
   const res = await fetch(`/api/molds/${moldId}`, { headers: { "Authorization": "Bearer " + TOKEN } });
-  const data = await res.json();
+  const data = await safeJson(res);
   if (!res.ok) return alert(data.detail || "조회 실패");
 
   const m = data.mold;
@@ -589,31 +658,65 @@ async function saveDetailMemo() {
       core_status: document.getElementById("detailStatusInput").value
     })
   });
-  const data = await res.json();
+  const data = await safeJson(res);
   if (!res.ok) return alert(data.detail || "저장 실패");
   alert(data.message);
   await openDetail(CURRENT_DETAIL_MOLD_ID);
   await loadMolds();
 }
 
+async function compressImage(file, maxSide = 1280, quality = 0.72) {
+  try {
+    const bmp = await createImageBitmap(file);
+    let w = bmp.width, h = bmp.height;
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    w = Math.max(1, Math.round(w * scale));
+    h = Math.max(1, Math.round(h * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    const blob = await new Promise(r => canvas.toBlob(r, "image/jpeg", quality));
+    return blob || file;
+  } catch (e) {
+    return file;
+  }
+}
+
 async function uploadPhoto(inputEl) {
   if (!CURRENT_DETAIL_MOLD_ID || !inputEl.files.length) return;
-  const fd = new FormData();
-  fd.append("file", inputEl.files[0]);
-
-  const res = await fetch(`/api/molds/${CURRENT_DETAIL_MOLD_ID}/photos`, {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + TOKEN },
-    body: fd
-  });
-  const data = await res.json();
-  inputEl.value = "";
-  if (!res.ok) return alert(data.detail || "사진 업로드 실패");
-  alert(data.message);
-  await openDetail(CURRENT_DETAIL_MOLD_ID);
+  toast("사진 압축/업로드 중...");
+  try {
+    const small = await compressImage(inputEl.files[0]);
+    const fd = new FormData();
+    fd.append("file", small, "photo.jpg");
+    const res = await fetch(`/api/molds/${CURRENT_DETAIL_MOLD_ID}/photos`, {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + TOKEN },
+      body: fd
+    });
+    const data = await safeJson(res);
+    inputEl.value = "";
+    if (!res.ok) return alert(data.detail || "사진 업로드 실패");
+    toast(data.message || "사진 업로드 완료");
+    await openDetail(CURRENT_DETAIL_MOLD_ID);
+  } catch (e) {
+    inputEl.value = "";
+    alert("사진 업로드 중 오류: " + e);
+  }
 }
 
 // QR 스캐너 (QR 값 예: MOLD:12 또는 모델명|아진No|몰드No)
+function cameraHelpMessage(e) {
+  const ua = navigator.userAgent || "";
+  const inApp = /KAKAOTALK|NAVER|Line\/|FBAN|FBAV|Instagram|DaumApps/i.test(ua);
+  let msg = "카메라를 열 수 없습니다.\n\n";
+  if (inApp) msg += "· 카카오톡/네이버 등 앱 안의 브라우저에서는 카메라가 막힐 수 있습니다. Chrome(또는 Safari)에서 주소를 직접 열어주세요.\n";
+  msg += "· 화면 위에 떠 있는 앱(메신저 버블, 화면 필터/야간모드, 화면 녹화 등)을 모두 끄고 다시 시도하세요.\n";
+  msg += "· 주소창 왼쪽 아이콘 → 권한 → 카메라 '허용'을 확인하세요.\n";
+  msg += "· 계속 안 되면 [🖼️ 사진으로 QR 인식] 버튼으로 QR을 사진 찍어 인식할 수 있습니다.";
+  return msg + "\n\n(" + e + ")";
+}
+
 async function openScanner(mode) {
   SCAN_MODE = mode;
   document.getElementById("scannerModeLabel").textContent =
@@ -632,23 +735,47 @@ async function openScanner(mode) {
       }
     );
   } catch (e) {
-    alert("카메라 실행 오류: " + e);
+    document.getElementById("scannerCard").classList.add("hidden");
+    alert(cameraHelpMessage(e));
   }
 }
 
 async function stopScanner() {
-  if (SCANNER_INSTANCE && SCANNER_INSTANCE.isScanning) {
-    await SCANNER_INSTANCE.stop();
-  }
+  try {
+    if (SCANNER_INSTANCE && SCANNER_INSTANCE.isScanning) {
+      await SCANNER_INSTANCE.stop();
+    }
+  } catch (e) {}
   document.getElementById("scannerCard").classList.add("hidden");
 }
 
-async function handleScannedQr(text) {
+// 카메라 권한 없이: 사진 한 장 찍어서 QR 인식 (이동목록에 담고 상세도 열기)
+async function scanFromPhoto(inputEl) {
+  if (!inputEl.files.length) return;
+  const file = inputEl.files[0];
+  inputEl.value = "";
+  try {
+    await stopScanner();
+    const tmp = new Html5Qrcode("qrReader");
+    const text = await tmp.scanFile(file, false);
+    SCAN_MODE = "both";
+    await handleScannedQr(String(text).trim(), true);
+  } catch (e) {
+    toast("QR을 인식하지 못했습니다. QR이 크게 보이도록 다시 찍어주세요.");
+  }
+}
+
+let _lastScanText = "", _lastScanAt = 0;
+async function handleScannedQr(text, force) {
+  const now = Date.now();
+  if (!force && text === _lastScanText && now - _lastScanAt < 2500) return;
+  _lastScanText = text; _lastScanAt = now;
+
   let target = null;
   if (text.startsWith("MOLD:")) {
     const idNum = Number(text.replace("MOLD:", "").trim());
     const res = await fetch(`/api/molds/${idNum}`, { headers: { "Authorization": "Bearer " + TOKEN } });
-    if (res.ok) target = (await res.json()).mold;
+    if (res.ok) target = (await safeJson(res)).mold;
   } else {
     const parts = text.split("|").map(s => s.trim());
     const queryTerm = parts[2] || parts[1] || parts[0];
@@ -656,19 +783,24 @@ async function handleScannedQr(text) {
       headers: { "Authorization": "Bearer " + TOKEN }
     });
     if (res.ok) {
-      const items = (await res.json()).items || [];
+      const items = (await safeJson(res)).items || [];
       target = items[0] || null;
     }
   }
 
-  if (!target) return;
+  if (!target) { toast("등록되지 않았거나 권한이 없는 QR입니다."); return; }
+  if (navigator.vibrate) navigator.vibrate(60);
 
-  if (SCAN_MODE === "move") {
+  if (SCAN_MODE === "move" || SCAN_MODE === "both") {
     if (!QUEUE.some(x => x.id === target.id)) {
       QUEUE.push(target);
       renderQueue();
+      toast(`담김: ${target.model_name} #${target.ajin_no} (${QUEUE.length}건)`);
+    } else {
+      toast("이미 담긴 금형입니다.");
     }
-  } else {
+  }
+  if (SCAN_MODE === "photo" || SCAN_MODE === "both") {
     await stopScanner();
     await openDetail(target.id);
   }
@@ -677,21 +809,28 @@ async function handleScannedQr(text) {
 // 엑셀 업로드
 async function uploadExcel() {
   const fileInput = document.getElementById("excelFile");
-  if (!fileInput.files.length) return alert("엑셀 파일을 선택하세요.");
+  if (!fileInput.files.length) return alert("엑셀 파일(.xlsx)을 선택하세요.");
+  const btn = document.querySelector("#tabPc button.primary");
   const fd = new FormData();
   fd.append("file", fileInput.files[0]);
-
-  const res = await fetch("/api/molds/upload-excel", {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + TOKEN },
-    body: fd
-  });
-  const data = await res.json();
-  if (!res.ok) return alert(data.detail || "업로드 실패");
-  alert(data.message);
-  fileInput.value = "";
-  await loadLocations();
-  await loadMolds();
+  if (btn) { btn.disabled = true; btn.textContent = "업로드 중..."; }
+  try {
+    const res = await fetch("/api/molds/upload-excel", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + TOKEN },
+      body: fd
+    });
+    const data = await safeJson(res);
+    if (!res.ok) return alert(data.detail || "업로드 실패");
+    alert(data.message);
+    fileInput.value = "";
+    await loadLocations();
+    await loadMolds();
+  } catch (e) {
+    alert("업로드 중 오류: " + e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "엑셀 업로드"; }
+  }
 }
 
 // BY-482BT 라벨 사이즈 조절 및 인쇄
@@ -741,8 +880,8 @@ async function loadAdminData() {
     fetch("/api/admin/locations", { headers: { "Authorization": "Bearer " + TOKEN } }),
     fetch("/api/admin/users", { headers: { "Authorization": "Bearer " + TOKEN } })
   ]);
-  const locs = (await locRes.json()).locations || [];
-  const users = (await usrRes.json()).users || [];
+  const locs = (await safeJson(locRes)).locations || [];
+  const users = (await safeJson(usrRes)).users || [];
 
   document.getElementById("locList").innerHTML = locs.map(l =>
     `<span class="pill" style="margin:2px;">${escapeHtml(l.name)} (${l.loc_type})</span>`
@@ -750,13 +889,13 @@ async function loadAdminData() {
 
   document.getElementById("userTableBody").innerHTML = users.map(u => `
     <tr>
-      <td>${escapeHtml(u.username)}</td>
-      <td>${escapeHtml(u.full_name)}</td>
-      <td><strong>${escapeHtml(u.initial)}</strong></td>
-      <td>${escapeHtml(u.role)}</td>
-      <td>${escapeHtml(u.assigned_location || "-")}</td>
-      <td>${u.is_active ? "활성" : "정지"}</td>
-      <td>
+      <td data-label="아이디">${escapeHtml(u.username)}</td>
+      <td data-label="이름">${escapeHtml(u.full_name)}</td>
+      <td data-label="이니셜"><strong>${escapeHtml(u.initial)}</strong></td>
+      <td data-label="권한">${escapeHtml(u.role)}</td>
+      <td data-label="담당위치">${escapeHtml(u.assigned_location || "-")}</td>
+      <td data-label="상태">${u.is_active ? "활성" : "정지"}</td>
+      <td class="actions">
         <button onclick="toggleUserActive(${u.id}, ${!u.is_active})">${u.is_active ? "정지" : "활성"}</button>
       </td>
     </tr>
@@ -772,7 +911,7 @@ async function createLocation() {
     headers: authHeaders(),
     body: JSON.stringify({ name, loc_type })
   });
-  if (!res.ok) return alert((await res.json()).detail || "추가 실패");
+  if (!res.ok) return alert((await safeJson(res)).detail || "추가 실패");
   document.getElementById("newLocName").value = "";
   await loadLocations();
   await loadAdminData();
@@ -792,7 +931,7 @@ async function createUser() {
     headers: authHeaders(),
     body: JSON.stringify(payload)
   });
-  const data = await res.json();
+  const data = await safeJson(res);
   if (!res.ok) return alert(data.detail || "계정 생성 실패");
   alert(`계정 생성 완료 (이니셜: ${data.user.initial})`);
   document.getElementById("newUsername").value = "";

@@ -385,6 +385,26 @@ def parse_mold_excel(file_bytes: bytes) -> List[Dict[str, str]]:
     return parsed
 
 
+def _fetch_existing_molds(model_name: str) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    start = 0
+    while True:
+        rows = (
+            supabase.table("operational_molds")
+            .select("id, ajin_no, mold_no, dw_no, part_description, current_warehouse")
+            .eq("model_name", model_name)
+            .range(start, start + 999)
+            .execute()
+            .data
+            or []
+        )
+        out.extend(rows)
+        if len(rows) < 1000:
+            break
+        start += 1000
+    return out
+
+
 @app.post("/api/molds/upload-excel")
 async def upload_excel(
     file: UploadFile = File(...),
@@ -393,64 +413,91 @@ async def upload_excel(
     if user.get("role") == "vendor":
         raise HTTPException(status_code=403, detail="외부업체 계정은 엑셀 일괄 업로드를 할 수 없습니다.")
 
+    fname = (file.filename or "").lower()
+    if fname.endswith(".xls"):
+        raise HTTPException(
+            status_code=400,
+            detail="구형 .xls 형식은 지원하지 않습니다. 엑셀에서 '다른 이름으로 저장'으로 .xlsx 로 저장한 뒤 올려주세요.",
+        )
+
     content = await file.read()
-    items = parse_mold_excel(content)
+    try:
+        items = parse_mold_excel(content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"엑셀 파일을 읽지 못했습니다: {e}")
     if not items:
         raise HTTPException(status_code=400, detail="업로드할 금형 데이터를 찾지 못했습니다.")
 
+    # 같은 파일 안의 중복 행 제거 (UNIQUE 제약 충돌 방지)
+    uniq: Dict[tuple, Dict[str, str]] = {}
+    for it in items:
+        key = (it["model_name"], it["ajin_no"], it["mold_no"], it["dw_no"], it["part_description"])
+        if key not in uniq:
+            uniq[key] = it
+    items = list(uniq.values())
+
     actor = user["initial"]
     ts = now_iso()
-    inserted_count = 0
-    updated_count = 0
 
-    for item in items:
-        # 기존 보관위치 자동 등록
-        loc_name = item["current_warehouse"].strip()
-        if loc_name:
-            loc_res = supabase.table("locations").select("id").eq("name", loc_name).execute().data or []
-            if not loc_res:
-                supabase.table("locations").insert({"name": loc_name, "loc_type": "vendor", "is_active": True}).execute()
+    try:
+        # 1) 보관위치 일괄 등록 (1회 조회 + 1회 insert)
+        wanted_locs = {it["current_warehouse"].strip() for it in items if it["current_warehouse"].strip()}
+        if wanted_locs:
+            have = {r["name"] for r in (supabase.table("locations").select("name").execute().data or [])}
+            missing = sorted(wanted_locs - have)
+            if missing:
+                supabase.table("locations").insert(
+                    [{"name": n, "loc_type": "vendor", "is_active": True} for n in missing]
+                ).execute()
 
-        existing = (
-            supabase.table("operational_molds")
-            .select("id, current_warehouse, core_status")
-            .eq("model_name", item["model_name"])
-            .eq("ajin_no", item["ajin_no"])
-            .eq("mold_no", item["mold_no"])
-            .eq("dw_no", item["dw_no"])
-            .eq("part_description", item["part_description"])
-            .execute()
-            .data
-            or []
-        )
+        # 2) 기존 금형 한 번에 조회
+        existing_map: Dict[tuple, Dict[str, Any]] = {}
+        for model in {it["model_name"] for it in items}:
+            for r in _fetch_existing_molds(model):
+                key = (model, r.get("ajin_no") or "", r.get("mold_no") or "", r.get("dw_no") or "", r.get("part_description") or "")
+                existing_map[key] = r
 
-        if existing:
-            mold_id = existing[0]["id"]
-            # 기존 현장 위치/상태는 보존하되 비어있을 때만 엑셀 위치 반영
-            patch: Dict[str, Any] = {"updated_by": actor, "updated_at": ts}
-            if not existing[0].get("current_warehouse") and loc_name:
-                patch["current_warehouse"] = loc_name
-            supabase.table("operational_molds").update(patch).eq("id", mold_id).execute()
-            updated_count += 1
-        else:
-            supabase.table("operational_molds").insert(
-                {
-                    "model_name": item["model_name"],
-                    "ajin_no": item["ajin_no"],
-                    "mold_no": item["mold_no"],
-                    "dw_no": item["dw_no"],
-                    "part_description": item["part_description"],
-                    "current_warehouse": loc_name,
-                    "core_status": "정상",
-                    "status_memo": "",
-                    "updated_by": actor,
-                    "updated_at": ts,
-                }
-            ).execute()
-            inserted_count += 1
+        to_insert: List[Dict[str, Any]] = []
+        to_fill_loc: List[tuple] = []
+        for key, it in uniq.items():
+            loc_name = it["current_warehouse"].strip()
+            found = existing_map.get(key)
+            if found:
+                if not (found.get("current_warehouse") or "") and loc_name:
+                    to_fill_loc.append((found["id"], loc_name))
+            else:
+                to_insert.append(
+                    {
+                        "model_name": it["model_name"],
+                        "ajin_no": it["ajin_no"],
+                        "mold_no": it["mold_no"],
+                        "dw_no": it["dw_no"],
+                        "part_description": it["part_description"],
+                        "current_warehouse": loc_name,
+                        "core_status": "정상",
+                        "status_memo": "",
+                        "updated_by": actor,
+                        "updated_at": ts,
+                    }
+                )
 
+        # 3) 신규는 묶음 insert
+        for i in range(0, len(to_insert), 200):
+            supabase.table("operational_molds").insert(to_insert[i : i + 200]).execute()
+
+        # 4) 기존 중 보관위치가 비어 있던 것만 채움
+        for mold_id, loc_name in to_fill_loc:
+            supabase.table("operational_molds").update(
+                {"current_warehouse": loc_name, "updated_by": actor, "updated_at": ts}
+            ).eq("id", mold_id).execute()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DB 저장 중 오류: {e}")
+
+    unchanged = len(items) - len(to_insert) - len(to_fill_loc)
     return {
-        "message": f"엑셀 반영 완료 (신규 {inserted_count}건, 기존 갱신 {updated_count}건)",
+        "message": f"엑셀 반영 완료 (신규 {len(to_insert)}건, 위치 보충 {len(to_fill_loc)}건, 변경없음 {unchanged}건)",
         "model_name": items[0]["model_name"],
         "total_parsed": len(items),
     }
