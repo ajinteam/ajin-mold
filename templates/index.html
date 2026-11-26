@@ -444,11 +444,14 @@ let SCANNER_INSTANCE = null;
 let SCAN_MODE = "move";
 
 async function safeJson(res) {
-  try { return await safeJson(res); }
+  let t = "";
+  try { t = await res.text(); } catch (e) {}
+  try { return JSON.parse(t); }
   catch (e) {
-    return { detail: res.status === 413 ? "파일이 너무 큽니다 (서버 한도 4.5MB)."
+    const snippet = String(t).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+    return { detail: (res.status === 413 ? "파일이 너무 큽니다 (서버 한도 4.5MB)."
                      : res.status === 504 ? "서버 응답 시간 초과입니다. 잠시 후 다시 시도하세요."
-                     : "서버 오류 (" + res.status + ")" };
+                     : "서버 오류 (" + res.status + ")") + (snippet ? " - " + snippet : "") };
   }
 }
 

@@ -112,10 +112,15 @@ def read_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
-    if not authorization or not authorization.startswith("Bearer "):
+def get_current_user(
+    authorization: Optional[str] = Header(default=None),
+    x_auth_token: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    token = (x_auth_token or "").strip()
+    if not token and authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    if not token:
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
-    token = authorization.split(" ", 1)[1].strip()
     session = read_token(token)
     if not session:
         raise HTTPException(status_code=401, detail="세션이 만료되었습니다. 다시 로그인해 주세요.")
@@ -184,7 +189,7 @@ def debug_info(request: Request):
     }
 
 
-PATH_WRAPPER_SCRIPT = """<script>
+PATH_WRAPPER_SCRIPT = r"""<script>
 (function () {
   if (window.__pathWrapped) return;
   window.__pathWrapped = true;
@@ -192,6 +197,10 @@ PATH_WRAPPER_SCRIPT = """<script>
   window.fetch = function (url, opts) {
     try {
       if (typeof url === "string" && url.indexOf("/api/") === 0 && url.indexOf("/api/index") !== 0) {
+        var hh = Object.assign({}, (opts && opts.headers) || {});
+        var au = hh["Authorization"] || hh["authorization"];
+        if (au) hh["X-Auth-Token"] = String(au).replace(/^Bearer\s+/i, "");
+        opts = Object.assign({}, opts || {}, { headers: hh });
         var u = new URL(url, location.origin);
         var p = new URLSearchParams(u.search);
         p.set("__path", u.pathname);
