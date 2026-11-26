@@ -490,7 +490,12 @@ function logout() {
 async function initSession() {
   if (!TOKEN) return;
   const res = await fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + TOKEN } });
-  if (!res.ok) { logout(); return; }
+  if (!res.ok) {
+    const d = await safeJson(res);
+    alert("로그인 확인 실패: " + (d.detail || res.status));
+    localStorage.removeItem("mold_token"); TOKEN = "";
+    return;
+  }
   const data = await safeJson(res);
   CURRENT_USER = data.user;
 

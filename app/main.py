@@ -1,5 +1,8 @@
+import base64
 import hashlib
+import hmac
 import io
+import json
 import os
 import secrets
 import time
@@ -78,11 +81,42 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+# 서버리스(Vercel)는 요청마다 다른 인스턴스에서 실행될 수 있으므로,
+# 메모리 세션 대신 서명된 토큰(HMAC)을 사용한다.
+TOKEN_TTL_SEC = 12 * 3600
+_SIGN_KEY = hashlib.sha256((APP_SECRET + "|" + SUPABASE_KEY).encode("utf-8")).digest()
+
+
+def make_token(user_info: Dict[str, Any]) -> str:
+    payload = dict(user_info)
+    payload["exp"] = int(time.time()) + TOKEN_TTL_SEC
+    body = base64.urlsafe_b64encode(
+        json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    sig = hmac.new(_SIGN_KEY, body.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{body}.{sig}"
+
+
+def read_token(token: str) -> Optional[Dict[str, Any]]:
+    try:
+        body, sig = token.rsplit(".", 1)
+        expect = hmac.new(_SIGN_KEY, body.encode("ascii"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expect):
+            return None
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode("utf-8"))
+        if int(payload.get("exp", 0)) < time.time():
+            return None
+        payload.pop("exp", None)
+        return payload
+    except Exception:
+        return None
+
+
 def get_current_user(authorization: Optional[str] = Header(default=None)) -> Dict[str, Any]:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="로그인이 필요합니다.")
     token = authorization.split(" ", 1)[1].strip()
-    session = SESSIONS.get(token)
+    session = read_token(token)
     if not session:
         raise HTTPException(status_code=401, detail="세션이 만료되었습니다. 다시 로그인해 주세요.")
     return session
@@ -201,7 +235,6 @@ def login(payload: LoginRequest):
     if not u.get("is_active"):
         raise HTTPException(status_code=403, detail="비활성화된 계정입니다. 마스터에게 문의하세요.")
 
-    token = secrets.token_urlsafe(32)
     user_info = {
         "id": u["id"],
         "username": u["username"],
@@ -210,12 +243,16 @@ def login(payload: LoginRequest):
         "role": u["role"],
         "assigned_location": u.get("assigned_location"),
     }
-    SESSIONS[token] = user_info
+    token = make_token(user_info)
     return {"token": token, "user": user_info}
 
 
 @app.get("/api/auth/me")
 def me(user: Dict[str, Any] = Depends(get_current_user)):
+    # 정지된 계정은 페이지를 열 때 바로 차단
+    rows = supabase.table("users").select("id, is_active").eq("id", user.get("id")).execute().data or []
+    if not rows or not rows[0].get("is_active"):
+        raise HTTPException(status_code=401, detail="비활성화되었거나 존재하지 않는 계정입니다.")
     return {"user": user}
 
 
@@ -340,11 +377,13 @@ def parse_mold_excel(file_bytes: bytes) -> List[Dict[str, str]]:
     wb = load_workbook(filename=io.BytesIO(file_bytes), data_only=True)
     ws = wb.active
 
-    # 병합 셀 값 채우기
+    # 병합 셀 값 채우기 (MergedCell은 값 대입이 불가하므로 병합을 먼저 해제)
     for rng in list(ws.merged_cells.ranges):
-        top_val = ws.cell(rng.min_row, rng.min_col).value
-        for r in range(rng.min_row, rng.max_row + 1):
-            for c in range(rng.min_col, rng.max_col + 1):
+        min_row, min_col, max_row, max_col = rng.min_row, rng.min_col, rng.max_row, rng.max_col
+        top_val = ws.cell(min_row, min_col).value
+        ws.unmerge_cells(str(rng))
+        for r in range(min_row, max_row + 1):
+            for c in range(min_col, max_col + 1):
                 if ws.cell(r, c).value is None:
                     ws.cell(r, c).value = top_val
 
