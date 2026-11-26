@@ -150,11 +150,37 @@ def debug_info(request: Request):
     }
 
 
+PATH_WRAPPER_SCRIPT = """<script>
+(function () {
+  if (window.__pathWrapped) return;
+  window.__pathWrapped = true;
+  var _f = window.fetch.bind(window);
+  window.fetch = function (url, opts) {
+    try {
+      if (typeof url === "string" && url.indexOf("/api/") === 0 && url.indexOf("/api/index") !== 0) {
+        var u = new URL(url, location.origin);
+        var p = new URLSearchParams(u.search);
+        p.set("__path", u.pathname);
+        url = "/api/index?" + p.toString();
+      }
+    } catch (e) {}
+    return _f(url, opts);
+  };
+})();
+</script>"""
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     for p in INDEX_CANDIDATES:
         if p.exists():
-            return HTMLResponse(p.read_text(encoding="utf-8"))
+            html = p.read_text(encoding="utf-8")
+            # 화면 파일이 예전 버전이어도 항상 경로 보정 스크립트를 먼저 실행시킨다
+            if "<head>" in html:
+                html = html.replace("<head>", "<head>\n" + PATH_WRAPPER_SCRIPT, 1)
+            else:
+                html = PATH_WRAPPER_SCRIPT + html
+            return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
     raise HTTPException(status_code=500, detail="index.html 파일을 찾을 수 없습니다. templates/index.html 위치를 확인하세요.")
 
 
