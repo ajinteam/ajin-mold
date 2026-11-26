@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>금형 QR · 위치 · 사진 관리</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --primary: #1d4ed8;
+      --primary-dark: #1e40af;
+      --accent: #0f766e;
+      --border: #d1d5db;
+      --text: #111827;
+      --muted: #6b7280;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "Noto Sans KR", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    .badge {
+      background: #2563eb;
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .container { max-width: 1120px; margin: 16px auto; padding: 0 12px 48px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .big-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      background: #fff;
+      color: var(--text);
+    }
+    button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    button.primary:hover { background: var(--primary-dark); }
+    button.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.big-btn {
+      padding: 18px 14px;
+      font-size: 16px;
+      border-radius: 12px;
+      text-align: center;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 9px 11px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .row > * { flex: 1 1 160px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #e5e7eb; padding: 8px 6px; text-align: left; }
+    th { background: #f9fafb; font-weight: 700; }
+    .hidden { display: none !important; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: #eef2ff;
+      color: #1e3a8a;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .photo-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 6px;
+      font-size: 11px;
+      background: #fafafa;
+    }
+    .photo-card img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 6px;
+      display: block;
+      margin-bottom: 4px;
+    }
+    /* BY-482BT 유포감열지 라벨 인쇄 영역 (기본 80x50mm, JS로 동적 변경) */
+    #printArea { display: none; }
+    @media print {
+      body * { visibility: hidden; }
+      #printArea, #printArea * { visibility: visible; }
+      #printArea {
+        display: block;
+        position: fixed;
+        left: 0;
+        top: 0;
+      }
+      .label-sheet {
+        width: var(--label-w, 80mm);
+        height: var(--label-h, 50mm);
+        page-break-after: always;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 2mm 3mm;
+        border: 0.2mm dashed #999;
+        overflow: hidden;
+      }
+      .label-qr img {
+        width: var(--qr-size, 36mm);
+        height: var(--qr-size, 36mm);
+      }
+      .label-text {
+        flex: 1;
+        padding-left: 2.5mm;
+        font-size: 9pt;
+        line-height: 1.25;
+        word-break: break-all;
+      }
+      .label-title { font-weight: 800; font-size: 10.5pt; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <strong>금형 QR · 위치 · 사진 관리</strong>
+    <span id="userBanner" class="badge hidden"></span>
+  </div>
+  <div id="headerControls" class="row hidden" style="flex:0 0 auto;">
+    <button onclick="switchTab('field')">현장/스캔</button>
+    <button id="btnTabPc" onclick="switchTab('pc')">PC관리/라벨</button>
+    <button id="btnTabMaster" class="hidden" onclick="switchTab('master')">마스터설정</button>
+    <button onclick="logout()">로그아웃</button>
+  </div>
+</header>
+
+<div class="container">
+  <!-- 로그인 화면 -->
+  <div id="loginBox" class="card" style="max-width:420px; margin: 40px auto;">
+    <h2 style="margin-top:0;">로그인</h2>
+    <p style="color:var(--muted); font-size:13px;">사내 계정 또는 외부 보관업체 계정으로 로그인하세요.</p>
+    <div style="margin-bottom:10px;">
+      <label>아이디</label>
+      <input id="loginId" type="text" placeholder="예: admin 또는 업체아이디" />
+    </div>
+    <div style="margin-bottom:14px;">
+      <label>비밀번호</label>
+      <input id="loginPw" type="password" placeholder="비밀번호" />
+    </div>
+    <button class="primary" style="width:100%;" onclick="doLogin()">로그인</button>
+  </div>
+
+  <!-- 메인 앱 영역 -->
+  <div id="appBox" class="hidden">
+
+    <!-- 1. 현장 / 외부업체 초간단 화면 -->
+    <div id="tabField">
+      <div class="big-actions">
+        <button class="primary big-btn" onclick="openScanner('move')">📷 QR 연속 스캔 · 이동</button>
+        <button class="accent big-btn" onclick="openScanner('photo')">📸 QR 스캔 · 사진촬영</button>
+        <button class="big-btn" onclick="stopScanner(); document.getElementById('searchInput').focus();">🔎 검색 (모델/아진/몰드/품명)</button>
+      </div>
+
+      <!-- QR 카메라 스캐너 박스 -->
+      <div id="scannerCard" class="card hidden">
+        <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+          <strong id="scannerModeLabel">QR 카메라 스캔</strong>
+          <button onclick="stopScanner()" style="flex:0 0 auto;">카메라 닫기</button>
+        </div>
+        <div id="qrReader" style="width:100%; max-width:420px; margin:auto;"></div>
+      </div>
+
+      <!-- 다중 스캔 이동 대기 바구니 -->
+      <div id="scanQueueCard" class="card">
+        <div class="row" style="justify-content:space-between;">
+          <strong>일괄 이동 대기 목록 (<span id="queueCount">0</span>건) · 기록자: <span class="actorLabel"></span></strong>
+          <button onclick="clearQueue()" style="flex:0 0 auto;">목록 비우기</button>
+        </div>
+        <div id="queueList" style="margin:8px 0; font-size:13px; color:var(--muted);">스캔하거나 아래 목록에서 '이동담기'를 누르세요.</div>
+        <div class="row">
+          <select id="bulkTargetLoc"></select>
+          <input id="bulkStatus" type="text" placeholder="상태 (예: 정상, 수리요청)" />
+          <input id="bulkMemo" type="text" placeholder="이동/상태 메모" />
+          <button class="primary" onclick="submitBulkMove()" style="flex:0 0 auto;">선택 금형 일괄 이동 저장</button>
+        </div>
+      </div>
+
+      <!-- 통합 검색 및 금형 목록 -->
+      <div class="card">
+        <div class="row" style="margin-bottom:10px;">
+          <input id="searchInput" type="text" placeholder="모델명, 아진No, 몰드No, 품명 검색..." onkeydown="if(event.key==='Enter') loadMolds()" />
+          <select id="filterLoc" onchange="loadMolds()">
+            <option value="">전체 보관위치/업체</option>
+          </select>
+          <button class="primary" onclick="loadMolds()" style="flex:0 0 auto;">조회</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>모델명</th>
+                <th>아진No</th>
+                <th>몰드No</th>
+                <th>품명</th>
+                <th>보관위치/업체</th>
+                <th>메모/기록자</th>
+                <th>작업</th>
+              </tr>
+            </thead>
+            <tbody id="moldTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 선택 금형 상세 / 메모 / 사진첩(업로드 날짜순) -->
+      <div id="detailCard" class="card hidden">
+        <div class="row" style="justify-content:space-between;">
+          <h3 id="detailTitle" style="margin:0;"></h3>
+          <button onclick="document.getElementById('detailCard').classList.add('hidden')" style="flex:0 0 auto;">닫기</button>
+        </div>
+        <p id="detailMeta" style="font-size:13px; color:var(--muted);"></p>
+
+        <div class="row" style="margin-bottom:12px;">
+          <input id="detailStatusInput" type="text" placeholder="상태" />
+          <input id="detailMemoInput" type="text" placeholder="메모 입력..." />
+          <button class="primary" onclick="saveDetailMemo()" style="flex:0 0 auto;">메모 저장 (<span class="actorLabel"></span>)</button>
+        </div>
+
+        <hr />
+        <div class="row" style="justify-content:space-between; margin:10px 0;">
+          <strong>금형 사진 (업로드 날짜 최신순)</strong>
+          <label class="accent" style="padding:8px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; flex:0 0 auto;">
+            📷 사진 촬영/선택 (자동 압축)
+            <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="uploadPhoto(this)" />
+          </label>
+        </div>
+        <div id="photoList" class="photo-grid"></div>
+
+        <hr style="margin-top:14px;" />
+        <strong>최근 이동/메모 이력</strong>
+        <ul id="historyList" style="font-size:13px; padding-left:18px;"></ul>
+      </div>
+    </div>
+
+    <!-- 2. PC 관리 · 엑셀 업로드 · BY-482BT 라벨 사이즈 조절 인쇄 -->
+    <div id="tabPc" class="hidden">
+      <div class="card">
+        <h3 style="margin-top:0;">엑셀 금형 리스트 업로드 (CPH-301E 등 기존 양식 호환)</h3>
+        <div class="row">
+          <input id="excelFile" type="file" accept=".xlsx,.xls" />
+          <button class="primary" onclick="uploadExcel()" style="flex:0 0 auto;">엑셀 업로드</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">BY-482BT 유포감열지 QR 라벨 출력 (사이즈 조절 가능)</h3>
+        <div class="row" style="margin-bottom:10px;">
+          <select id="labelPreset" onchange="applyLabelPreset()">
+            <option value="80x50">금형 본체 80 × 50 mm (기본)</option>
+            <option value="50x30">코어/소형 50 × 30 mm</option>
+            <option value="40x20">초소형 코어 40 × 20 mm</option>
+            <option value="custom">직접 입력 (mm)</option>
+          </select>
+          <input id="labelW" type="number" value="80" min="15" max="110" placeholder="가로(mm)" />
+          <input id="labelH" type="number" value="50" min="15" max="150" placeholder="세로(mm)" />
+          <button class="primary" onclick="printSelectedLabels()" style="flex:0 0 auto;">선택 금형 라벨 인쇄</button>
+        </div>
+        <p style="font-size:12px; color:var(--muted); margin:0;">
+          * 현장/검색 목록에서 체크박스로 금형을 선택한 뒤 [선택 금형 라벨 인쇄]를 누르세요. (인쇄 배율 100% 권장)
+        </p>
+      </div>
+    </div>
+
+    <!-- 3. 마스터 설정: 사용자 및 외부업체 입력/관리 -->
+    <div id="tabMaster" class="hidden">
+      <div class="card">
+        <h3 style="margin-top:0;">외부 보관업체 / 위치 추가</h3>
+        <div class="row">
+          <input id="newLocName" type="text" placeholder="업체명 또는 보관위치 (예: ○○금형)" />
+          <select id="newLocType">
+            <option value="vendor">외부업체 (vendor)</option>
+            <option value="internal">사내/창고 (internal)</option>
+          </select>
+          <button class="primary" onclick="createLocation()" style="flex:0 0 auto;">위치/업체 추가</button>
+        </div>
+        <div id="locList" style="margin-top:10px; font-size:13px;"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0;">사용자 / 외부업체 로그인 계정 추가</h3>
+        <div class="row" style="margin-bottom:8px;">
+          <input id="newUsername" type="text" placeholder="로그인 아이디" />
+          <input id="newPassword" type="password" placeholder="초기 비밀번호" />
+          <input id="newFullName" type="text" placeholder="이름 또는 업체 담당자" />
+          <input id="newInitial" type="text" maxlength="6" placeholder="이니셜 (예: JS, OR)" />
+        </div>
+        <div class="row">
+          <select id="newRole">
+            <option value="vendor">외부업체 계정 (자사 금형만 열람/이동)</option>
+            <option value="staff">사내 작업자 (전체 조회/이동)</option>
+            <option value="master">마스터 (설정·계정 관리 포함)</option>
+          </select>
+          <select id="newUserLoc">
+            <option value="">담당 보관위치/업체 선택</option>
+          </select>
+          <button class="primary" onclick="createUser()" style="flex:0 0 auto;">계정 생성</button>
+        </div>
+
+        <table style="margin-top:14px;">
+          <thead>
+            <tr>
+              <th>아이디</th>
+              <th>이름</th>
+              <th>이니셜</th>
+              <th>권한</th>
+              <th>담당위치/업체</th>
+              <th>상태</th>
+              <th>제어</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 인쇄 전용 영역 -->
+<div id="printArea"></div>
+
+<script>
+let TOKEN = localStorage.getItem("mold_token") || "";
+let CURRENT_USER = null;
+let CURRENT_MOLDS = [];
+let QUEUE = [];
+let CURRENT_DETAIL_MOLD_ID = null;
+let SCANNER_INSTANCE = null;
+let SCAN_MODE = "move";
+
+function authHeaders() {
+  return { "Authorization": "Bearer " + TOKEN, "Content-Type": "application/json" };
+}
+
+async function doLogin() {
+  const username = document.getElementById("loginId").value.trim();
+  const password = document.getElementById("loginPw").value;
+  const res = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.detail || "로그인 실패");
+  TOKEN = data.token;
+  localStorage.setItem("mold_token", TOKEN);
+  await initSession();
+}
+
+function logout() {
+  localStorage.removeItem("mold_token");
+  TOKEN = "";
+  CURRENT_USER = null;
+  location.reload();
+}
+
+async function initSession() {
+  if (!TOKEN) return;
+  const res = await fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + TOKEN } });
+  if (!res.ok) { logout(); return; }
+  const data = await res.json();
+  CURRENT_USER = data.user;
+
+  document.getElementById("loginBox").classList.add("hidden");
+  document.getElementById("appBox").classList.remove("hidden");
+  document.getElementById("headerControls").classList.remove("hidden");
+
+  const banner = document.getElementById("userBanner");
+  banner.textContent = `작업자 이니셜: ${CURRENT_USER.initial} (${CURRENT_USER.full_name} / ${CURRENT_USER.role})`;
+  banner.classList.remove("hidden");
+
+  document.querySelectorAll(".actorLabel").forEach(el => el.textContent = CURRENT_USER.initial);
+
+  if (CURRENT_USER.role === "master") {
+    document.getElementById("btnTabMaster").classList.remove("hidden");
+  }
+  if (CURRENT_USER.role === "vendor") {
+    document.getElementById("btnTabPc").classList.add("hidden");
+  }
+
+  await loadLocations();
+  await loadMolds();
+  if (CURRENT_USER.role === "master") {
+    await loadAdminData();
+  }
+}
+
+function switchTab(tab) {
+  document.getElementById("tabField").classList.toggle("hidden", tab !== "field");
+  document.getElementById("tabPc").classList.toggle("hidden", tab !== "pc");
+  document.getElementById("tabMaster").classList.toggle("hidden", tab !== "master");
+}
+
+async function loadLocations() {
+  const res = await fetch("/api/locations", { headers: { "Authorization": "Bearer " + TOKEN } });
+  const data = await res.json();
+  const locs = data.locations || [];
+
+  const filterSel = document.getElementById("filterLoc");
+  const bulkSel = document.getElementById("bulkTargetLoc");
+  const newUserLocSel = document.getElementById("newUserLoc");
+
+  filterSel.innerHTML = '<option value="">전체 보관위치/업체</option>';
+  bulkSel.innerHTML = '<option value="">이동할 위치 선택</option>';
+  newUserLocSel.innerHTML = '<option value="">담당 보관위치/업체 선택</option>';
+
+  locs.forEach(l => {
+    filterSel.innerHTML += `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`;
+    bulkSel.innerHTML += `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`;
+    newUserLocSel.innerHTML += `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`;
+  });
+
+  if (CURRENT_USER.role === "vendor" && CURRENT_USER.assigned_location) {
+    filterSel.value = CURRENT_USER.assigned_location;
+    filterSel.disabled = true;
+  }
+}
+
+async function loadMolds() {
+  const q = document.getElementById("searchInput").value.trim();
+  const wh = document.getElementById("filterLoc").value;
+  const params = new URLSearchParams({ q, warehouse: wh, limit: "40" });
+  const res = await fetch("/api/molds?" + params.toString(), {
+    headers: { "Authorization": "Bearer " + TOKEN }
+  });
+  const data = await res.json();
+  CURRENT_MOLDS = data.items || [];
+  renderMoldTable();
+}
+
+function renderMoldTable() {
+  const tbody = document.getElementById("moldTableBody");
+  if (!CURRENT_MOLDS.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">조회된 금형이 없습니다.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = CURRENT_MOLDS.map(m => `
+    <tr>
+      <td><input type="checkbox" class="moldChk" value="${m.id}" /> <strong>${escapeHtml(m.model_name)}</strong></td>
+      <td>${escapeHtml(m.ajin_no)}</td>
+      <td>${escapeHtml(m.mold_no)}</td>
+      <td>${escapeHtml(m.part_description)} <span style="color:var(--muted)">${escapeHtml(m.dw_no || "")}</span></td>
+      <td><span class="pill">${escapeHtml(m.current_warehouse || "-")}</span></td>
+      <td>${escapeHtml(m.status_memo || "")} <small style="color:var(--muted)">(${escapeHtml(m.updated_by || "")})</small></td>
+      <td style="white-space:nowrap;">
+        <button onclick="addToQueue(${m.id})">+이동담기</button>
+        <button onclick="openDetail(${m.id})">상세/사진</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+function addToQueue(moldId) {
+  const found = CURRENT_MOLDS.find(x => x.id === moldId);
+  if (!found) return;
+  if (QUEUE.some(x => x.id === moldId)) return;
+  QUEUE.push(found);
+  renderQueue();
+}
+
+function clearQueue() {
+  QUEUE = [];
+  renderQueue();
+}
+
+function renderQueue() {
+  document.getElementById("queueCount").textContent = QUEUE.length;
+  const box = document.getElementById("queueList");
+  if (!QUEUE.length) {
+    box.textContent = "스캔하거나 목록에서 '+이동담기'를 누르세요.";
+    return;
+  }
+  box.innerHTML = QUEUE.map(m =>
+    `<span class="pill" style="margin:2px;">${escapeHtml(m.model_name)} #${escapeHtml(m.ajin_no)} / ${escapeHtml(m.mold_no)}</span>`
+  ).join(" ");
+}
+
+async function submitBulkMove() {
+  if (!QUEUE.length) return alert("이동할 금형이 없습니다.");
+  const toWarehouse = document.getElementById("bulkTargetLoc").value;
+  if (!toWarehouse) return alert("이동할 위치(업체/창고)를 선택하세요.");
+
+  const res = await fetch("/api/molds/bulk-move", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      mold_ids: QUEUE.map(x => x.id),
+      to_warehouse: toWarehouse,
+      core_status: document.getElementById("bulkStatus").value.trim() || null,
+      memo: document.getElementById("bulkMemo").value.trim()
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.detail || "이동 실패");
+  alert(data.message);
+  document.getElementById("bulkMemo").value = "";
+  clearQueue();
+  await loadMolds();
+}
+
+async function openDetail(moldId) {
+  CURRENT_DETAIL_MOLD_ID = moldId;
+  const res = await fetch(`/api/molds/${moldId}`, { headers: { "Authorization": "Bearer " + TOKEN } });
+  const data = await res.json();
+  if (!res.ok) return alert(data.detail || "조회 실패");
+
+  const m = data.mold;
+  document.getElementById("detailCard").classList.remove("hidden");
+  document.getElementById("detailTitle").textContent = `${m.model_name} #${m.ajin_no} (${m.mold_no})`;
+  document.getElementById("detailMeta").textContent =
+    `품명: ${m.part_description || "-"} | 보관위치: ${m.current_warehouse || "-"} | 상태: ${m.core_status || "-"} | 최종기록: ${m.updated_by || "-"}`;
+  document.getElementById("detailStatusInput").value = m.core_status || "정상";
+  document.getElementById("detailMemoInput").value = m.status_memo || "";
+
+  const photoDiv = document.getElementById("photoList");
+  const photos = data.photos || [];
+  photoDiv.innerHTML = photos.length
+    ? photos.map(p => `
+        <div class="photo-card">
+          <a href="${p.public_url}" target="_blank"><img src="${p.public_url}" loading="lazy" /></a>
+          <div><strong>${escapeHtml(p.uploaded_by)}</strong> · ${p.file_size_kb}KB</div>
+          <div style="color:var(--muted)">${new Date(p.uploaded_at).toLocaleString()}</div>
+        </div>
+      `).join("")
+    : '<div style="color:var(--muted); font-size:13px;">등록된 사진이 없습니다.</div>';
+
+  const histUl = document.getElementById("historyList");
+  const hist = data.history || [];
+  histUl.innerHTML = hist.length
+    ? hist.map(h => `<li>[${new Date(h.created_at).toLocaleString()}] <strong>${escapeHtml(h.actor_initial)}</strong>: ${escapeHtml(h.from_warehouse || "-")} → ${escapeHtml(h.to_warehouse || "-")} ${h.memo ? "/ " + escapeHtml(h.memo) : ""}</li>`).join("")
+    : "<li>이력이 없습니다.</li>";
+}
+
+async function saveDetailMemo() {
+  if (!CURRENT_DETAIL_MOLD_ID) return;
+  const res = await fetch(`/api/molds/${CURRENT_DETAIL_MOLD_ID}/memo`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({
+      memo: document.getElementById("detailMemoInput").value,
+      core_status: document.getElementById("detailStatusInput").value
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.detail || "저장 실패");
+  alert(data.message);
+  await openDetail(CURRENT_DETAIL_MOLD_ID);
+  await loadMolds();
+}
+
+async function uploadPhoto(inputEl) {
+  if (!CURRENT_DETAIL_MOLD_ID || !inputEl.files.length) return;
+  const fd = new FormData();
+  fd.append("file", inputEl.files[0]);
+
+  const res = await fetch(`/api/molds/${CURRENT_DETAIL_MOLD_ID}/photos`, {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + TOKEN },
+    body: fd
+  });
+  const data = await res.json();
+  inputEl.value = "";
+  if (!res.ok) return alert(data.detail || "사진 업로드 실패");
+  alert(data.message);
+  await openDetail(CURRENT_DETAIL_MOLD_ID);
+}
+
+// QR 스캐너 (QR 값 예: MOLD:12 또는 모델명|아진No|몰드No)
+async function openScanner(mode) {
+  SCAN_MODE = mode;
+  document.getElementById("scannerModeLabel").textContent =
+    mode === "move" ? "QR 연속 스캔 (이동 대기목록에 계속 추가됨)" : "QR 스캔 (스캔 즉시 사진/상세 열람)";
+  document.getElementById("scannerCard").classList.remove("hidden");
+
+  if (!SCANNER_INSTANCE) {
+    SCANNER_INSTANCE = new Html5Qrcode("qrReader");
+  }
+  try {
+    await SCANNER_INSTANCE.start(
+      { facingMode: "environment" },
+      { fps: 8, qrbox: { width: 220, height: 220 } },
+      async (decodedText) => {
+        await handleScannedQr(decodedText.trim());
+      }
+    );
+  } catch (e) {
+    alert("카메라 실행 오류: " + e);
+  }
+}
+
+async function stopScanner() {
+  if (SCANNER_INSTANCE && SCANNER_INSTANCE.isScanning) {
+    await SCANNER_INSTANCE.stop();
+  }
+  document.getElementById("scannerCard").classList.add("hidden");
+}
+
+async function handleScannedQr(text) {
+  let target = null;
+  if (text.startsWith("MOLD:")) {
+    const idNum = Number(text.replace("MOLD:", "").trim());
+    const res = await fetch(`/api/molds/${idNum}`, { headers: { "Authorization": "Bearer " + TOKEN } });
+    if (res.ok) target = (await res.json()).mold;
+  } else {
+    const parts = text.split("|").map(s => s.trim());
+    const queryTerm = parts[2] || parts[1] || parts[0];
+    const res = await fetch(`/api/molds?q=${encodeURIComponent(queryTerm)}&limit=5`, {
+      headers: { "Authorization": "Bearer " + TOKEN }
+    });
+    if (res.ok) {
+      const items = (await res.json()).items || [];
+      target = items[0] || null;
+    }
+  }
+
+  if (!target) return;
+
+  if (SCAN_MODE === "move") {
+    if (!QUEUE.some(x => x.id === target.id)) {
+      QUEUE.push(target);
+      renderQueue();
+    }
+  } else {
+    await stopScanner();
+    await openDetail(target.id);
+  }
+}
+
+// 엑셀 업로드
+async function uploadExcel() {
+  const fileInput = document.getElementById("excelFile");
+  if (!fileInput.files.length) return alert("엑셀 파일을 선택하세요.");
+  const fd = new FormData();
+  fd.append("file", fileInput.files[0]);
+
+  const res = await fetch("/api/molds/upload-excel", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + TOKEN },
+    body: fd
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.detail || "업로드 실패");
+  alert(data.message);
+  fileInput.value = "";
+  await loadLocations();
+  await loadMolds();
+}
+
+// BY-482BT 라벨 사이즈 조절 및 인쇄
+function applyLabelPreset() {
+  const preset = document.getElementById("labelPreset").value;
+  if (preset === "80x50") { labelW.value = 80; labelH.value = 50; }
+  else if (preset === "50x30") { labelW.value = 50; labelH.value = 30; }
+  else if (preset === "40x20") { labelW.value = 40; labelH.value = 20; }
+}
+
+function printSelectedLabels() {
+  const checkedIds = Array.from(document.querySelectorAll(".moldChk:checked")).map(el => Number(el.value));
+  const targets = checkedIds.length ? CURRENT_MOLDS.filter(m => checkedIds.includes(m.id)) : QUEUE;
+  if (!targets.length) return alert("인쇄할 금형을 체크하거나 이동목록에 담아주세요.");
+
+  const w = Number(document.getElementById("labelW").value) || 80;
+  const h = Number(document.getElementById("labelH").value) || 50;
+  const qrMm = Math.max(12, Math.min(w * 0.45, h - 6));
+
+  const printArea = document.getElementById("printArea");
+  printArea.style.setProperty("--label-w", `${w}mm`);
+  printArea.style.setProperty("--label-h", `${h}mm`);
+  printArea.style.setProperty("--qr-size", `${qrMm}mm`);
+
+  printArea.innerHTML = targets.map(m => {
+    const qrPayload = encodeURIComponent(`MOLD:${m.id}`);
+    const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrPayload}`;
+    return `
+      <div class="label-sheet">
+        <div class="label-qr"><img src="${qrImgUrl}" /></div>
+        <div class="label-text">
+          <div class="label-title">${escapeHtml(m.model_name)} #${escapeHtml(m.ajin_no)}</div>
+          <div><strong>${escapeHtml(m.mold_no)}</strong></div>
+          <div>${escapeHtml(m.part_description || "")} ${escapeHtml(m.dw_no || "")}</div>
+          <div style="font-size:7.5pt;">${escapeHtml(m.current_warehouse || "")}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  setTimeout(() => window.print(), 300);
+}
+
+// 마스터 설정 기능
+async function loadAdminData() {
+  const [locRes, usrRes] = await Promise.all([
+    fetch("/api/admin/locations", { headers: { "Authorization": "Bearer " + TOKEN } }),
+    fetch("/api/admin/users", { headers: { "Authorization": "Bearer " + TOKEN } })
+  ]);
+  const locs = (await locRes.json()).locations || [];
+  const users = (await usrRes.json()).users || [];
+
+  document.getElementById("locList").innerHTML = locs.map(l =>
+    `<span class="pill" style="margin:2px;">${escapeHtml(l.name)} (${l.loc_type})</span>`
+  ).join(" ");
+
+  document.getElementById("userTableBody").innerHTML = users.map(u => `
+    <tr>
+      <td>${escapeHtml(u.username)}</td>
+      <td>${escapeHtml(u.full_name)}</td>
+      <td><strong>${escapeHtml(u.initial)}</strong></td>
+      <td>${escapeHtml(u.role)}</td>
+      <td>${escapeHtml(u.assigned_location || "-")}</td>
+      <td>${u.is_active ? "활성" : "정지"}</td>
+      <td>
+        <button onclick="toggleUserActive(${u.id}, ${!u.is_active})">${u.is_active ? "정지" : "활성"}</button>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function createLocation() {
+  const name = document.getElementById("newLocName").value.trim();
+  const loc_type = document.getElementById("newLocType").value;
+  if (!name) return alert("업체/보관위치 이름을 입력하세요.");
+  const res = await fetch("/api/admin/locations", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ name, loc_type })
+  });
+  if (!res.ok) return alert((await res.json()).detail || "추가 실패");
+  document.getElementById("newLocName").value = "";
+  await loadLocations();
+  await loadAdminData();
+}
+
+async function createUser() {
+  const payload = {
+    username: document.getElementById("newUsername").value.trim(),
+    password: document.getElementById("newPassword").value,
+    full_name: document.getElementById("newFullName").value.trim(),
+    initial: document.getElementById("newInitial").value.trim(),
+    role: document.getElementById("newRole").value,
+    assigned_location: document.getElementById("newUserLoc").value || null
+  };
+  const res = await fetch("/api/admin/users", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (!res.ok) return alert(data.detail || "계정 생성 실패");
+  alert(`계정 생성 완료 (이니셜: ${data.user.initial})`);
+  document.getElementById("newUsername").value = "";
+  document.getElementById("newPassword").value = "";
+  document.getElementById("newFullName").value = "";
+  document.getElementById("newInitial").value = "";
+  await loadAdminData();
+}
+
+async function toggleUserActive(userId, nextActive) {
+  const res = await fetch(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: authHeaders(),
+    body: JSON.stringify({ is_active: nextActive })
+  });
+  if (res.ok) await loadAdminData();
+}
+
+function escapeHtml(str) {
+  return String(str ?? "").replace(/[&<>"']/g, s => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[s]));
+}
+
+initSession();
+</script>
+</body>
+</html>
