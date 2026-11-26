@@ -34,14 +34,26 @@ INDEX_CANDIDATES = [
 
 
 @app.middleware("http")
-async def normalize_path(request: Request, call_next):
-    """Vercel rewrite 시 경로가 /api/index 로 들어오는 경우 원래 경로로 복원."""
-    path = request.scope.get("path", "/")
-    for prefix in ("/api/index.py", "/api/index"):
-        if path == prefix:
-            request.scope["path"] = "/"
-            break
+async def restore_original_path(request: Request, call_next):
+    """Vercel rewrite 로 /api/index?__path=원래경로 형태로 들어온 요청을 원래 경로로 복원."""
+    from urllib.parse import parse_qsl, urlencode
+
+    scope = request.scope
+    if scope.get("path", "") in ("/api/index", "/api/index.py"):
+        pairs = parse_qsl(scope.get("query_string", b"").decode("utf-8"), keep_blank_values=True)
+        orig = None
+        rest = []
+        for k, v in pairs:
+            if k == "__path" and orig is None:
+                orig = v
+            else:
+                rest.append((k, v))
+        new_path = "/" + (orig or "").lstrip("/")
+        scope["path"] = new_path
+        scope["raw_path"] = new_path.encode("utf-8")
+        scope["query_string"] = urlencode(rest).encode("utf-8")
     return await call_next(request)
+
 
 # 메모리 기반 간단 세션 토큰 저장소 (단일 인스턴스 기준, 필요시 DB/Redis로 확장 가능)
 SESSIONS: Dict[str, Dict[str, Any]] = {}
