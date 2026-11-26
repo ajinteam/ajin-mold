@@ -127,6 +127,17 @@ class MemoUpdateRequest(BaseModel):
 
 # ------------------ 페이지 & 인증 ------------------
 
+@app.get("/api/debug")
+def debug_info(request: Request):
+    """배포 점검용: 서버가 실제로 받은 경로/메서드 확인 (문제 해결 후 삭제 가능)"""
+    return {
+        "path": request.scope.get("path"),
+        "query": request.scope.get("query_string", b"").decode("utf-8"),
+        "method": request.method,
+        "routes": sorted({f"{','.join(sorted(r.methods))} {r.path}" for r in app.routes if hasattr(r, "methods")}),
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     for p in INDEX_CANDIDATES:

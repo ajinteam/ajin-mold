@@ -1,10 +1,13 @@
 {
-  "functions": {
-    "api/index.py": {
-      "includeFiles": "{app,templates}/**"
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python",
+      "config": { "includeFiles": ["app/**", "templates/**"] }
     }
-  },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index?__path=$1" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "api/index.py" }
   ]
 }
