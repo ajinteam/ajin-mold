@@ -33,26 +33,34 @@ INDEX_CANDIDATES = [
 ]
 
 
-@app.middleware("http")
-async def restore_original_path(request: Request, call_next):
-    """Vercel rewrite 로 /api/index?__path=원래경로 형태로 들어온 요청을 원래 경로로 복원."""
-    from urllib.parse import parse_qsl, urlencode
+class RestorePathMiddleware:
+    """Vercel이 요청 경로를 /api/index(.py) 로 바꿔 전달해도, ?__path=원래경로 값으로 복원한다.
+    (프론트의 모든 API 호출이 /api/index?__path=/api/... 형태로 오므로 Vercel 설정과 무관하게 동작)"""
 
-    scope = request.scope
-    if scope.get("path", "") in ("/api/index", "/api/index.py"):
-        pairs = parse_qsl(scope.get("query_string", b"").decode("utf-8"), keep_blank_values=True)
-        orig = None
-        rest = []
-        for k, v in pairs:
-            if k == "__path" and orig is None:
-                orig = v
-            else:
-                rest.append((k, v))
-        new_path = "/" + (orig or "").lstrip("/")
-        scope["path"] = new_path
-        scope["raw_path"] = new_path.encode("utf-8")
-        scope["query_string"] = urlencode(rest).encode("utf-8")
-    return await call_next(request)
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") in ("http", "websocket") and scope.get("path") in ("/api/index", "/api/index.py"):
+            from urllib.parse import parse_qsl, urlencode
+
+            pairs = parse_qsl(scope.get("query_string", b"").decode("utf-8"), keep_blank_values=True)
+            orig = None
+            rest = []
+            for k, v in pairs:
+                if k == "__path" and orig is None:
+                    orig = v
+                else:
+                    rest.append((k, v))
+            new_path = "/" + (orig or "").lstrip("/")
+            scope = dict(scope)
+            scope["path"] = new_path
+            scope["raw_path"] = new_path.encode("utf-8")
+            scope["query_string"] = urlencode(rest).encode("utf-8")
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(RestorePathMiddleware)
 
 
 # 메모리 기반 간단 세션 토큰 저장소 (단일 인스턴스 기준, 필요시 DB/Redis로 확장 가능)
@@ -134,6 +142,7 @@ def debug_info(request: Request):
         "path": request.scope.get("path"),
         "query": request.scope.get("query_string", b"").decode("utf-8"),
         "method": request.method,
+        "headers": {k: v for k, v in request.headers.items() if k.lower() not in ("authorization", "cookie")},
         "routes": sorted({f"{','.join(sorted(r.methods))} {r.path}" for r in app.routes if hasattr(r, "methods")}),
     }
 

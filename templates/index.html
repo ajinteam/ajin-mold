@@ -419,6 +419,22 @@
 <div id="printArea"></div>
 
 <script>
+// 모든 /api/ 호출을 /api/index?__path=... 형태로 보내 Vercel 경로 처리와 무관하게 동작시킴
+(function () {
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = function (url, opts) {
+    try {
+      if (typeof url === "string" && url.startsWith("/api/") && !url.startsWith("/api/index")) {
+        const u = new URL(url, location.origin);
+        const p = new URLSearchParams(u.search);
+        p.set("__path", u.pathname);
+        url = "/api/index?" + p.toString();
+      }
+    } catch (e) {}
+    return _origFetch(url, opts);
+  };
+})();
+
 let TOKEN = localStorage.getItem("mold_token") || "";
 let CURRENT_USER = null;
 let CURRENT_MOLDS = [];
