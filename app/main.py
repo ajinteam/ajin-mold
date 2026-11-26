@@ -4,12 +4,11 @@ import os
 import secrets
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from openpyxl import load_workbook
 from PIL import Image, ImageOps
 from pydantic import BaseModel
@@ -26,7 +25,23 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 app = FastAPI(title="금형 QR · 위치 · 사진 관리 시스템")
-templates = Jinja2Templates(directory="templates")
+BASE_DIR = Path(__file__).resolve().parent.parent
+INDEX_CANDIDATES = [
+    BASE_DIR / "templates" / "index.html",
+    BASE_DIR / "index.html",
+    Path(__file__).resolve().parent / "index.html",
+]
+
+
+@app.middleware("http")
+async def normalize_path(request: Request, call_next):
+    """Vercel rewrite 시 경로가 /api/index 로 들어오는 경우 원래 경로로 복원."""
+    path = request.scope.get("path", "/")
+    for prefix in ("/api/index.py", "/api/index"):
+        if path == prefix:
+            request.scope["path"] = "/"
+            break
+    return await call_next(request)
 
 # 메모리 기반 간단 세션 토큰 저장소 (단일 인스턴스 기준, 필요시 DB/Redis로 확장 가능)
 SESSIONS: Dict[str, Dict[str, Any]] = {}
@@ -101,8 +116,11 @@ class MemoUpdateRequest(BaseModel):
 # ------------------ 페이지 & 인증 ------------------
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+def index():
+    for p in INDEX_CANDIDATES:
+        if p.exists():
+            return HTMLResponse(p.read_text(encoding="utf-8"))
+    raise HTTPException(status_code=500, detail="index.html 파일을 찾을 수 없습니다. templates/index.html 위치를 확인하세요.")
 
 
 @app.post("/api/auth/login")
