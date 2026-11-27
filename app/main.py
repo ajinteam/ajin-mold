@@ -124,7 +124,18 @@ def get_current_user(
     session = read_token(token)
     if not session:
         raise HTTPException(status_code=401, detail="세션이 만료되었습니다. 다시 로그인해 주세요.")
-    return session
+    rows = (
+        supabase.table("users")
+        .select("id, username, full_name, initial, role, assigned_location, is_active")
+        .eq("id", session.get("id"))
+        .execute()
+        .data
+        or []
+    )
+    if not rows or not rows[0].get("is_active"):
+        raise HTTPException(status_code=401, detail="비활성화되었거나 삭제된 계정입니다.")
+    u = rows[0]
+    return {k: u.get(k) for k in ("id", "username", "full_name", "initial", "role", "assigned_location")}
 
 
 def require_master(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -161,6 +172,17 @@ class UserUpdate(BaseModel):
     assigned_location: Optional[str] = None
     is_active: Optional[bool] = None
     new_password: Optional[str] = None
+
+
+class LocationUpdate(BaseModel):
+    name: Optional[str] = None
+    loc_type: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class BulkMoveRequest(BaseModel):
@@ -223,7 +245,7 @@ def index():
                 html = html.replace("<head>", "<head>\n" + PATH_WRAPPER_SCRIPT, 1)
             else:
                 html = PATH_WRAPPER_SCRIPT + html
-            return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0"})
+            return HTMLResponse(html, headers={"Cache-Control": "no-store, max-age=0", "Permissions-Policy": "camera=(self)"})
     raise HTTPException(status_code=500, detail="index.html 파일을 찾을 수 없습니다. templates/index.html 위치를 확인하세요.")
 
 
@@ -256,12 +278,32 @@ def login(payload: LoginRequest):
     return {"token": token, "user": user_info}
 
 
+MIN_PW_LEN = 4
+
+
+@app.post("/api/auth/change-password")
+def change_password(payload: PasswordChange, user: Dict[str, Any] = Depends(get_current_user)):
+    if len(payload.new_password) < MIN_PW_LEN:
+        raise HTTPException(status_code=400, detail=f"새 비밀번호는 {MIN_PW_LEN}자 이상이어야 합니다. (6자 이상 권장)")
+    if payload.new_password == payload.current_password:
+        raise HTTPException(status_code=400, detail="현재 비밀번호와 다른 비밀번호를 입력해 주세요.")
+    ok = (
+        supabase.table("users")
+        .select("id")
+        .eq("id", user["id"])
+        .eq("password_hash", hash_password(payload.current_password))
+        .execute()
+        .data
+        or []
+    )
+    if not ok:
+        raise HTTPException(status_code=403, detail="현재 비밀번호가 올바르지 않습니다.")
+    supabase.table("users").update({"password_hash": hash_password(payload.new_password)}).eq("id", user["id"]).execute()
+    return {"message": "비밀번호가 변경되었습니다."}
+
+
 @app.get("/api/auth/me")
 def me(user: Dict[str, Any] = Depends(get_current_user)):
-    # 정지된 계정은 페이지를 열 때 바로 차단
-    rows = supabase.table("users").select("id, is_active").eq("id", user.get("id")).execute().data or []
-    if not rows or not rows[0].get("is_active"):
-        raise HTTPException(status_code=401, detail="비활성화되었거나 존재하지 않는 계정입니다.")
     return {"user": user}
 
 
@@ -353,24 +395,65 @@ def admin_create_user(payload: UserCreate, _: Dict[str, Any] = Depends(require_m
     return {"user": u}
 
 
+def _active_master_count(exclude_id: Optional[int] = None) -> int:
+    rows = supabase.table("users").select("id").eq("role", "master").eq("is_active", True).execute().data or []
+    return len([r for r in rows if r["id"] != exclude_id])
+
+
+def _count_rows(table: str, column: str, value: str) -> int:
+    res = supabase.table(table).select("id", count="exact").eq(column, value).limit(1).execute()
+    if getattr(res, "count", None) is not None:
+        return int(res.count)
+    return len(res.data or [])
+
+
 @app.patch("/api/admin/users/{user_id}")
-def admin_update_user(user_id: int, payload: UserUpdate, _: Dict[str, Any] = Depends(require_master)):
+def admin_update_user(user_id: int, payload: UserUpdate, me: Dict[str, Any] = Depends(require_master)):
+    cur_rows = (
+        supabase.table("users").select("id, role, assigned_location, is_active").eq("id", user_id).execute().data or []
+    )
+    if not cur_rows:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+    cur = cur_rows[0]
+
     patch: Dict[str, Any] = {}
     if payload.full_name is not None:
+        if not payload.full_name.strip():
+            raise HTTPException(status_code=400, detail="이름은 비워둘 수 없습니다.")
         patch["full_name"] = payload.full_name.strip()
     if payload.initial is not None and payload.initial.strip():
         patch["initial"] = payload.initial.strip().upper()
+
+    new_role = cur["role"]
     if payload.role in ("master", "staff", "vendor"):
         patch["role"] = payload.role
+        new_role = payload.role
+
+    new_loc = cur.get("assigned_location")
     if payload.assigned_location is not None:
-        patch["assigned_location"] = payload.assigned_location.strip() or None
+        new_loc = payload.assigned_location.strip() or None
+        patch["assigned_location"] = new_loc
+    if new_role == "vendor" and not new_loc:
+        raise HTTPException(status_code=400, detail="외부업체 계정은 담당 보관위치(업체명)를 선택해야 합니다.")
+
+    new_active = bool(cur["is_active"])
     if payload.is_active is not None:
         patch["is_active"] = payload.is_active
+        new_active = payload.is_active
+
     if payload.new_password:
+        if len(payload.new_password) < MIN_PW_LEN:
+            raise HTTPException(status_code=400, detail=f"비밀번호는 {MIN_PW_LEN}자 이상이어야 합니다.")
         patch["password_hash"] = hash_password(payload.new_password)
 
     if not patch:
         raise HTTPException(status_code=400, detail="변경할 항목이 없습니다.")
+
+    if user_id == me["id"] and not new_active:
+        raise HTTPException(status_code=400, detail="본인 계정은 정지할 수 없습니다.")
+    losing_master = cur["role"] == "master" and cur["is_active"] and (new_role != "master" or not new_active)
+    if losing_master and _active_master_count(exclude_id=user_id) == 0:
+        raise HTTPException(status_code=400, detail="마지막 활성 마스터 계정은 권한 변경/정지할 수 없습니다.")
 
     updated = supabase.table("users").update(patch).eq("id", user_id).execute().data or []
     if not updated:
@@ -378,6 +461,75 @@ def admin_update_user(user_id: int, payload: UserUpdate, _: Dict[str, Any] = Dep
     u = updated[0]
     u.pop("password_hash", None)
     return {"user": u}
+
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_delete_user(user_id: int, me: Dict[str, Any] = Depends(require_master)):
+    if user_id == me["id"]:
+        raise HTTPException(status_code=400, detail="본인 계정은 삭제할 수 없습니다.")
+    rows = supabase.table("users").select("id, username, role, is_active").eq("id", user_id).execute().data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+    target = rows[0]
+    if target["role"] == "master" and target["is_active"] and _active_master_count(exclude_id=user_id) == 0:
+        raise HTTPException(status_code=400, detail="마지막 활성 마스터 계정은 삭제할 수 없습니다.")
+    supabase.table("users").delete().eq("id", user_id).execute()
+    return {"message": f"계정 '{target['username']}' 삭제 완료"}
+
+
+@app.patch("/api/admin/locations/{loc_id}")
+def admin_update_location(loc_id: int, payload: LocationUpdate, _: Dict[str, Any] = Depends(require_master)):
+    rows = supabase.table("locations").select("id, name, loc_type, is_active").eq("id", loc_id).execute().data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="위치/업체를 찾을 수 없습니다.")
+    old = rows[0]
+
+    patch: Dict[str, Any] = {}
+    new_name = old["name"]
+    if payload.name is not None:
+        new_name = payload.name.strip()
+        if not new_name:
+            raise HTTPException(status_code=400, detail="이름을 입력해 주세요.")
+        if new_name != old["name"]:
+            dup = supabase.table("locations").select("id").eq("name", new_name).execute().data or []
+            if dup:
+                raise HTTPException(status_code=409, detail="이미 같은 이름의 위치/업체가 있습니다.")
+            patch["name"] = new_name
+    if payload.loc_type in ("vendor", "internal"):
+        patch["loc_type"] = payload.loc_type
+    if payload.is_active is not None:
+        patch["is_active"] = payload.is_active
+    if not patch:
+        raise HTTPException(status_code=400, detail="변경할 항목이 없습니다.")
+
+    updated = supabase.table("locations").update(patch).eq("id", loc_id).execute().data or []
+    if "name" in patch:
+        # 이름 변경 시 해당 위치를 쓰는 금형/계정도 같이 변경
+        supabase.table("operational_molds").update({"current_warehouse": new_name}).eq("current_warehouse", old["name"]).execute()
+        supabase.table("users").update({"assigned_location": new_name}).eq("assigned_location", old["name"]).execute()
+    return {"location": updated[0] if updated else None}
+
+
+@app.delete("/api/admin/locations/{loc_id}")
+def admin_delete_location(loc_id: int, _: Dict[str, Any] = Depends(require_master)):
+    rows = supabase.table("locations").select("id, name").eq("id", loc_id).execute().data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="위치/업체를 찾을 수 없습니다.")
+    name = rows[0]["name"]
+    mold_cnt = _count_rows("operational_molds", "current_warehouse", name)
+    if mold_cnt:
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{name}'에 금형 {mold_cnt}건이 있어 삭제할 수 없습니다. 금형을 먼저 다른 곳으로 이동하거나, 삭제 대신 '비활성'으로 바꿔 주세요.",
+        )
+    user_cnt = _count_rows("users", "assigned_location", name)
+    if user_cnt:
+        raise HTTPException(
+            status_code=409,
+            detail=f"'{name}'에 연결된 계정 {user_cnt}개가 있어 삭제할 수 없습니다. 계정의 담당 위치를 먼저 바꾸거나 계정을 삭제해 주세요.",
+        )
+    supabase.table("locations").delete().eq("id", loc_id).execute()
+    return {"message": f"'{name}' 삭제 완료"}
 
 
 # ------------------ 엑셀 파싱 & 업로드 (기존 양식 호환) ------------------

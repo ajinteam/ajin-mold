@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>금형 QR · 위치 · 사진 관리</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
   <style>
     :root {
       --bg: #f4f6f9;
@@ -164,6 +165,25 @@
       border-radius: 999px; font-size: 14px; z-index: 100; display: none;
       max-width: 90vw; text-align: center;
     }
+    .muted { color: var(--muted); }
+    .grp-model { background:#0f172a; color:#fff; padding:8px 12px; border-radius:8px; margin:14px 0 6px; display:flex; justify-content:space-between; align-items:center; font-weight:700; }
+    .grp-model small { font-weight:500; opacity:.8; }
+    .grp-ajin { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; background:#eef2ff; border-radius:8px; padding:8px 12px; margin:8px 0 2px; font-size:14px; }
+    .mrow { display:flex; gap:8px; align-items:center; border-bottom:1px solid #e5e7eb; padding:8px 4px; }
+    .mrow .minfo { flex:1; min-width:0; font-size:14px; }
+    .mrow .mmeta { font-size:12px; color:var(--muted); margin-top:2px; word-break:break-all; }
+    .mrow .mbtns { display:flex; gap:6px; flex:0 0 auto; }
+    button.mini { padding:6px 10px; font-size:12px; min-height:0; }
+    button.queued { background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
+    button.danger { background:#dc2626; border-color:#dc2626; color:#fff; }
+    .chip { display:inline-flex; align-items:center; gap:6px; background:#eef2ff; color:#1e3a8a; border-radius:999px; padding:4px 6px 4px 10px; margin:3px; font-size:12px; font-weight:600; }
+    .chip button { border:0; background:#c7d2fe; color:#1e3a8a; border-radius:50%; width:24px; height:24px; min-height:0; padding:0; line-height:1; font-size:12px; }
+    .locrow { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid #e5e7eb; }
+    .locbtns { display:flex; gap:6px; }
+    #modalBack { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:flex; align-items:center; justify-content:center; padding:12px; }
+    #modalBox { background:#fff; border-radius:12px; padding:16px; width:100%; max-width:420px; max-height:90vh; overflow:auto; }
+    .fld { display:block; margin-bottom:10px; }
+    .fld > span { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
     /* ===== 모바일 최적화 ===== */
     @media (max-width: 640px) {
       .container { margin: 8px auto; padding: 0 8px 48px; }
@@ -195,6 +215,11 @@
       .photo-card img { height: 110px; }
       #scannerCard #qrReader { max-width: 100%; }
       .moldChk { width: 22px; height: 22px; min-height: 0; vertical-align: middle; }
+      .mrow { flex-wrap: wrap; }
+      .mrow .mbtns { width: 100%; }
+      .mrow .mbtns button { flex: 1 1 50%; }
+      .locbtns { width: 100%; }
+      .locbtns button { flex: 1 1 50%; }
     }
   </style>
 </head>
@@ -208,6 +233,7 @@
     <button onclick="switchTab('field')">현장/스캔</button>
     <button id="btnTabPc" onclick="switchTab('pc')">PC관리/라벨</button>
     <button id="btnTabMaster" class="hidden" onclick="switchTab('master')">마스터설정</button>
+    <button onclick="openPasswordModal()">비밀번호 변경</button>
     <button onclick="logout()">로그아웃</button>
   </div>
 </header>
@@ -256,9 +282,9 @@
       <div id="scanQueueCard" class="card">
         <div class="row" style="justify-content:space-between;">
           <strong>일괄 이동 대기 목록 (<span id="queueCount">0</span>건) · 기록자: <span class="actorLabel"></span></strong>
-          <button onclick="clearQueue()" style="flex:0 0 auto;">목록 비우기</button>
+          <button onclick="clearQueue()" style="flex:0 0 auto;">전체 비우기</button>
         </div>
-        <div id="queueList" style="margin:8px 0; font-size:13px; color:var(--muted);">스캔하거나 아래 목록에서 '이동담기'를 누르세요.</div>
+        <div id="queueList" style="margin:8px 0; font-size:13px; color:var(--muted);">스캔하거나 아래 목록에서 '이동담기'를 누르세요. (담긴 항목은 ✕ 로 하나씩 취소할 수 있습니다)</div>
         <div class="row">
           <select id="bulkTargetLoc"></select>
           <input id="bulkStatus" type="text" placeholder="상태 (예: 정상, 수리요청)" />
@@ -276,22 +302,7 @@
           </select>
           <button class="primary" onclick="loadMolds()" style="flex:0 0 auto;">조회</button>
         </div>
-        <div style="overflow-x:auto;">
-          <table class="resp">
-            <thead>
-              <tr>
-                <th>모델명</th>
-                <th>아진No</th>
-                <th>몰드No</th>
-                <th>품명</th>
-                <th>보관위치/업체</th>
-                <th>메모/기록자</th>
-                <th>작업</th>
-              </tr>
-            </thead>
-            <tbody id="moldTableBody"></tbody>
-          </table>
-        </div>
+        <div id="moldList"></div>
       </div>
 
       <!-- 선택 금형 상세 / 메모 / 사진첩(업로드 날짜순) -->
@@ -362,9 +373,19 @@
     <!-- 3. 마스터 설정: 사용자 및 외부업체 입력/관리 -->
     <div id="tabMaster" class="hidden">
       <div class="card">
+        <div class="row" style="justify-content:space-between;">
+          <h3 style="margin:0;">설정</h3>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button onclick="openPasswordModal()">🔑 내 비밀번호 변경</button>
+            <button onclick="resetSettings()">🔄 새로고침 (입력 초기화)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
         <h3 style="margin-top:0;">외부 보관업체 / 위치 추가</h3>
         <div class="row">
-          <input id="newLocName" type="text" placeholder="업체명 또는 보관위치 (예: ○○금형)" />
+          <input id="newLocName" type="text" autocomplete="off" placeholder="업체명 또는 보관위치 (예: ○○금형)" />
           <select id="newLocType">
             <option value="vendor">외부업체 (vendor)</option>
             <option value="internal">사내/창고 (internal)</option>
@@ -377,8 +398,8 @@
       <div class="card">
         <h3 style="margin-top:0;">사용자 / 외부업체 로그인 계정 추가</h3>
         <div class="row" style="margin-bottom:8px;">
-          <input id="newUsername" type="text" placeholder="로그인 아이디" />
-          <input id="newPassword" type="password" placeholder="초기 비밀번호" />
+          <input id="newUsername" type="text" autocomplete="off" placeholder="로그인 아이디" />
+          <input id="newPassword" type="password" autocomplete="new-password" placeholder="초기 비밀번호" />
           <input id="newFullName" type="text" placeholder="이름 또는 업체 담당자" />
           <input id="newInitial" type="text" maxlength="6" placeholder="이니셜 (예: JS, OR)" />
         </div>
@@ -414,6 +435,8 @@
   </div>
 </div>
 
+<div id="modalBack" class="hidden" onclick="if(event.target===this) closeModal()"><div id="modalBox"></div></div>
+<div id="qrFileHost" style="position:absolute; left:-9999px; top:0; width:320px;"></div>
 <div id="toast"></div>
 <!-- 인쇄 전용 영역 -->
 <div id="printArea"></div>
@@ -560,7 +583,7 @@ async function loadLocations() {
 async function loadMolds() {
   const q = document.getElementById("searchInput").value.trim();
   const wh = document.getElementById("filterLoc").value;
-  const params = new URLSearchParams({ q, warehouse: wh, limit: "40" });
+  const params = new URLSearchParams({ q, warehouse: wh, limit: "100" });
   const res = await fetch("/api/molds?" + params.toString(), {
     headers: { "Authorization": "Bearer " + TOKEN }
   });
@@ -570,36 +593,90 @@ async function loadMolds() {
 }
 
 function renderMoldTable() {
-  const tbody = document.getElementById("moldTableBody");
+  const box = document.getElementById("moldList");
   if (!CURRENT_MOLDS.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">조회된 금형이 없습니다.</td></tr>';
+    box.innerHTML = '<div class="muted" style="text-align:center; padding:16px;">조회된 금형이 없습니다.</div>';
     return;
   }
-  tbody.innerHTML = CURRENT_MOLDS.map(m => `
-    <tr>
-      <td data-label="모델명"><input type="checkbox" class="moldChk" value="${m.id}" /> <strong>${escapeHtml(m.model_name)}</strong></td>
-      <td data-label="아진No">${escapeHtml(m.ajin_no)}</td>
-      <td data-label="몰드No">${escapeHtml(m.mold_no)}</td>
-      <td data-label="품명">${escapeHtml(m.part_description)} <span style="color:var(--muted)">${escapeHtml(m.dw_no || "")}</span></td>
-      <td data-label="보관위치"><span class="pill">${escapeHtml(m.current_warehouse || "-")}</span></td>
-      <td data-label="메모">${escapeHtml(m.status_memo || "")} <small style="color:var(--muted)">(${escapeHtml(m.updated_by || "")})</small></td>
-      <td class="actions" style="white-space:nowrap;">
-        <button onclick="addToQueue(${m.id})">+이동담기</button>
-        <button onclick="openDetail(${m.id})">상세/사진</button>
-      </td>
-    </tr>
-  `).join("");
+  // 모델명 → 아진No 순으로 묶어서 표시 (같은 이름은 한 번만)
+  const models = new Map();
+  CURRENT_MOLDS.forEach(m => {
+    if (!models.has(m.model_name)) models.set(m.model_name, new Map());
+    const ajins = models.get(m.model_name);
+    if (!ajins.has(m.ajin_no)) ajins.set(m.ajin_no, []);
+    ajins.get(m.ajin_no).push(m);
+  });
+
+  let html = "";
+  models.forEach((ajins, model) => {
+    let total = 0;
+    ajins.forEach(rows => { total += rows.length; });
+    html += `<div class="grp-model"><span>${escapeHtml(model)}</span><small>${total}건</small></div>`;
+    ajins.forEach((rows, ajin) => {
+      const moldNos = [...new Set(rows.map(r => r.mold_no).filter(Boolean))];
+      const ids = rows.map(r => r.id).join(",");
+      html += `<div class="grp-ajin">
+        <div><strong>아진 #${escapeHtml(ajin)}</strong> <span class="muted">몰드 ${escapeHtml(moldNos.join(", "))}</span></div>
+        <button class="mini" onclick="addGroupToQueue('${ids}')">이 아진번호 전체 담기</button>
+      </div>`;
+      rows.forEach(m => {
+        const moldTag = moldNos.length > 1 ? `몰드 ${escapeHtml(m.mold_no)} · ` : "";
+        html += `<div class="mrow">
+          <input type="checkbox" class="moldChk" value="${m.id}" />
+          <div class="minfo">
+            <div><strong>${escapeHtml(m.part_description || "-")}</strong> <span class="muted">${escapeHtml(m.dw_no || "")}</span></div>
+            <div class="mmeta">${moldTag}<span class="pill">${escapeHtml(m.current_warehouse || "-")}</span>
+              ${escapeHtml(m.status_memo || "")} <small>(${escapeHtml(m.updated_by || "")})</small></div>
+          </div>
+          <div class="mbtns">
+            <button data-qid="${m.id}" onclick="toggleQueue(${m.id})">+이동담기</button>
+            <button onclick="openDetail(${m.id})">상세/사진</button>
+          </div>
+        </div>`;
+      });
+    });
+  });
+  box.innerHTML = html;
+  refreshQueueButtons();
+}
+
+function refreshQueueButtons() {
+  document.querySelectorAll("button[data-qid]").forEach(b => {
+    const queued = QUEUE.some(x => String(x.id) === b.dataset.qid);
+    b.textContent = queued ? "✕ 담기취소" : "+이동담기";
+    b.classList.toggle("queued", queued);
+  });
+}
+
+function toggleQueue(moldId) {
+  if (QUEUE.some(x => x.id === moldId)) removeFromQueue(moldId);
+  else addToQueue(moldId);
 }
 
 function addToQueue(moldId) {
   const found = CURRENT_MOLDS.find(x => x.id === moldId);
-  if (!found) return;
-  if (QUEUE.some(x => x.id === moldId)) return;
+  if (!found || QUEUE.some(x => x.id === moldId)) return;
   QUEUE.push(found);
   renderQueue();
 }
 
-function clearQueue() {
+function addGroupToQueue(idsStr) {
+  let added = 0;
+  idsStr.split(",").map(Number).forEach(id => {
+    const found = CURRENT_MOLDS.find(x => x.id === id);
+    if (found && !QUEUE.some(x => x.id === id)) { QUEUE.push(found); added++; }
+  });
+  renderQueue();
+  toast(added ? `${added}건 담김 (총 ${QUEUE.length}건)` : "이미 모두 담겨 있습니다.");
+}
+
+function removeFromQueue(moldId) {
+  QUEUE = QUEUE.filter(x => x.id !== moldId);
+  renderQueue();
+}
+
+function clearQueue(skipConfirm) {
+  if (!skipConfirm && QUEUE.length >= 2 && !confirm(`담긴 ${QUEUE.length}건을 모두 비울까요?`)) return;
   QUEUE = [];
   renderQueue();
 }
@@ -609,11 +686,11 @@ function renderQueue() {
   const box = document.getElementById("queueList");
   if (!QUEUE.length) {
     box.textContent = "스캔하거나 목록에서 '+이동담기'를 누르세요.";
-    return;
+  } else {
+    box.innerHTML = QUEUE.map(m => `<span class="chip">${escapeHtml(m.model_name)} #${escapeHtml(m.ajin_no)} · ${escapeHtml(m.part_description || m.mold_no)}
+      <button onclick="removeFromQueue(${m.id})" aria-label="담기 취소">✕</button></span>`).join("");
   }
-  box.innerHTML = QUEUE.map(m =>
-    `<span class="pill" style="margin:2px;">${escapeHtml(m.model_name)} #${escapeHtml(m.ajin_no)} / ${escapeHtml(m.mold_no)}</span>`
-  ).join(" ");
+  refreshQueueButtons();
 }
 
 async function submitBulkMove() {
@@ -635,7 +712,7 @@ async function submitBulkMove() {
   if (!res.ok) return alert(data.detail || "이동 실패");
   alert(data.message);
   document.getElementById("bulkMemo").value = "";
-  clearQueue();
+  clearQueue(true);
   await loadMolds();
 }
 
@@ -734,10 +811,11 @@ function cameraHelpMessage(e) {
   const ua = navigator.userAgent || "";
   const inApp = /KAKAOTALK|NAVER|Line\/|FBAN|FBAV|Instagram|DaumApps/i.test(ua);
   let msg = "카메라를 열 수 없습니다.\n\n";
-  if (inApp) msg += "· 카카오톡/네이버 등 앱 안의 브라우저에서는 카메라가 막힐 수 있습니다. Chrome(또는 Safari)에서 주소를 직접 열어주세요.\n";
-  msg += "· 화면 위에 떠 있는 앱(메신저 버블, 화면 필터/야간모드, 화면 녹화 등)을 모두 끄고 다시 시도하세요.\n";
-  msg += "· 주소창 왼쪽 아이콘 → 권한 → 카메라 '허용'을 확인하세요.\n";
-  msg += "· 계속 안 되면 [🖼️ 사진으로 QR 인식] 버튼으로 QR을 사진 찍어 인식할 수 있습니다.";
+  if (inApp) msg += "· 카카오톡/네이버 등 앱 안의 브라우저에서는 카메라가 막힙니다. Chrome에서 주소를 직접 여세요.\n";
+  msg += "· [휴대폰 설정 → 앱 → Chrome → 권한 → 카메라]를 먼저 '허용'(앱 사용 중에만 허용)으로 바꿔주세요. 권한 창이 다른 앱에 가려져 안 뜨는 경우 이 방법이 가장 확실합니다.\n";
+  msg += "· 화면 위에 떠 있는 앱(메신저 버블, 화면 필터/야간모드, 화면 녹화 등)을 끄세요.\n";
+  msg += "· Chrome 메뉴(⋮) → 설정 → 사이트 설정 → 카메라에서 이 사이트를 허용하세요.\n";
+  msg += "· 계속 안 되면 [🖼️ 사진으로 QR 인식] 버튼을 쓰세요. (휴대폰 기본 카메라로 찍기 때문에 권한이 필요 없습니다)";
   return msg + "\n\n(" + e + ")";
 }
 
@@ -773,19 +851,56 @@ async function stopScanner() {
   document.getElementById("scannerCard").classList.add("hidden");
 }
 
-// 카메라 권한 없이: 사진 한 장 찍어서 QR 인식 (이동목록에 담고 상세도 열기)
+// 카메라 권한 없이: 휴대폰 기본 카메라로 QR을 찍어서 인식 (이동목록에 담고 상세도 열기)
+async function decodeQrFromFile(file) {
+  let bmp = null;
+  try { bmp = await createImageBitmap(file); } catch (e) {}
+
+  // 1) 브라우저 내장 QR 인식 (Android Chrome 등)
+  if (bmp && "BarcodeDetector" in window) {
+    try {
+      const det = new BarcodeDetector({ formats: ["qr_code"] });
+      const found = await det.detect(bmp);
+      if (found && found.length) return found[0].rawValue;
+    } catch (e) {}
+  }
+  // 2) jsQR: 여러 크기로 줄여가며 시도 (고해상도 사진은 줄여야 잘 읽힘)
+  if (bmp && window.jsQR) {
+    for (const maxSide of [1000, 1500, 700, 2000]) {
+      const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+      const w = Math.max(1, Math.round(bmp.width * scale));
+      const h = Math.max(1, Math.round(bmp.height * scale));
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(bmp, 0, 0, w, h);
+      const r = jsQR(ctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "attemptBoth" });
+      if (r && r.data) return r.data;
+    }
+  }
+  // 3) 마지막 수단: html5-qrcode 파일 스캔
+  try {
+    if (window.Html5Qrcode) return await new Html5Qrcode("qrFileHost").scanFile(file, false);
+  } catch (e) {}
+  return null;
+}
+
 async function scanFromPhoto(inputEl) {
   if (!inputEl.files.length) return;
   const file = inputEl.files[0];
   inputEl.value = "";
+  toast("QR 인식 중...");
   try {
     await stopScanner();
-    const tmp = new Html5Qrcode("qrReader");
-    const text = await tmp.scanFile(file, false);
+    const text = await decodeQrFromFile(file);
+    if (!text) {
+      alert("QR을 인식하지 못했습니다.\n· QR이 화면 가운데에 크게, 흔들리지 않게 찍어주세요.\n· 라벨이 반사되거나 구겨지지 않았는지 확인하세요.");
+      return;
+    }
     SCAN_MODE = "both";
     await handleScannedQr(String(text).trim(), true);
   } catch (e) {
-    toast("QR을 인식하지 못했습니다. QR이 크게 보이도록 다시 찍어주세요.");
+    alert("QR 인식 중 오류: " + e);
   }
 }
 
@@ -899,19 +1014,49 @@ function printSelectedLabels() {
 }
 
 // 마스터 설정 기능
+let ADMIN_USERS = [];
+let ADMIN_LOCS = [];
+let MODAL_SAVE = null;
+
+function openModal(title, bodyHtml, onSave, saveLabel) {
+  MODAL_SAVE = onSave;
+  document.getElementById("modalBox").innerHTML =
+    `<h3 style="margin:0 0 10px;">${escapeHtml(title)}</h3>${bodyHtml}
+     <div class="row" style="margin-top:12px;">
+       <button onclick="closeModal()">취소</button>
+       <button class="primary" onclick="MODAL_SAVE && MODAL_SAVE()">${escapeHtml(saveLabel || "저장")}</button>
+     </div>`;
+  document.getElementById("modalBack").classList.remove("hidden");
+}
+
+function closeModal() {
+  MODAL_SAVE = null;
+  document.getElementById("modalBack").classList.add("hidden");
+  document.getElementById("modalBox").innerHTML = "";
+}
+
 async function loadAdminData() {
   const [locRes, usrRes] = await Promise.all([
     fetch("/api/admin/locations", { headers: { "Authorization": "Bearer " + TOKEN } }),
     fetch("/api/admin/users", { headers: { "Authorization": "Bearer " + TOKEN } })
   ]);
-  const locs = (await safeJson(locRes)).locations || [];
-  const users = (await safeJson(usrRes)).users || [];
+  ADMIN_LOCS = (await safeJson(locRes)).locations || [];
+  ADMIN_USERS = (await safeJson(usrRes)).users || [];
 
-  document.getElementById("locList").innerHTML = locs.map(l =>
-    `<span class="pill" style="margin:2px;">${escapeHtml(l.name)} (${l.loc_type})</span>`
-  ).join(" ");
+  document.getElementById("locList").innerHTML = ADMIN_LOCS.length
+    ? ADMIN_LOCS.map(l => `
+      <div class="locrow">
+        <div><strong>${escapeHtml(l.name)}</strong>
+          <span class="pill">${l.loc_type === "vendor" ? "외부업체" : "사내"}</span>
+          ${l.is_active ? "" : '<span class="pill" style="background:#fee2e2; color:#991b1b;">비활성</span>'}</div>
+        <div class="locbtns">
+          <button class="mini" onclick="openEditLoc(${l.id})">수정</button>
+          <button class="mini danger" onclick="deleteLoc(${l.id})">삭제</button>
+        </div>
+      </div>`).join("")
+    : '<span class="muted">등록된 위치/업체가 없습니다.</span>';
 
-  document.getElementById("userTableBody").innerHTML = users.map(u => `
+  document.getElementById("userTableBody").innerHTML = ADMIN_USERS.map(u => `
     <tr>
       <td data-label="아이디">${escapeHtml(u.username)}</td>
       <td data-label="이름">${escapeHtml(u.full_name)}</td>
@@ -919,8 +1064,10 @@ async function loadAdminData() {
       <td data-label="권한">${escapeHtml(u.role)}</td>
       <td data-label="담당위치">${escapeHtml(u.assigned_location || "-")}</td>
       <td data-label="상태">${u.is_active ? "활성" : "정지"}</td>
-      <td class="actions">
-        <button onclick="toggleUserActive(${u.id}, ${!u.is_active})">${u.is_active ? "정지" : "활성"}</button>
+      <td class="actions" style="white-space:nowrap;">
+        <button class="mini" onclick="openEditUser(${u.id})">수정</button>
+        <button class="mini" onclick="toggleUserActive(${u.id}, ${!u.is_active})">${u.is_active ? "정지" : "활성"}</button>
+        <button class="mini danger" onclick="deleteUser(${u.id})">삭제</button>
       </td>
     </tr>
   `).join("");
@@ -971,7 +1118,135 @@ async function toggleUserActive(userId, nextActive) {
     headers: authHeaders(),
     body: JSON.stringify({ is_active: nextActive })
   });
-  if (res.ok) await loadAdminData();
+  if (!res.ok) return alert((await safeJson(res)).detail || "변경 실패");
+  await loadAdminData();
+}
+
+function locOptions(selected) {
+  return '<option value="">(없음)</option>' + ADMIN_LOCS.map(l =>
+    `<option value="${escapeHtml(l.name)}" ${l.name === selected ? "selected" : ""}>${escapeHtml(l.name)}</option>`).join("");
+}
+
+function openEditUser(id) {
+  const u = ADMIN_USERS.find(x => x.id === id);
+  if (!u) return;
+  const roleOpt = (v, t) => `<option value="${v}" ${u.role === v ? "selected" : ""}>${t}</option>`;
+  openModal("계정 수정", `
+    <div class="fld"><span>아이디 (변경 불가)</span><input value="${escapeHtml(u.username)}" disabled></div>
+    <div class="fld"><span>이름 / 업체 담당자</span><input id="eu_name" value="${escapeHtml(u.full_name)}"></div>
+    <div class="fld"><span>이니셜</span><input id="eu_initial" maxlength="6" value="${escapeHtml(u.initial)}"></div>
+    <div class="fld"><span>권한</span><select id="eu_role">
+      ${roleOpt("vendor", "외부업체 (자사 금형만)")}${roleOpt("staff", "사내 작업자")}${roleOpt("master", "마스터")}</select></div>
+    <div class="fld"><span>담당 보관위치/업체 (외부업체는 필수)</span><select id="eu_loc">${locOptions(u.assigned_location)}</select></div>
+    <div class="fld"><span>새 비밀번호 (바꿀 때만 입력, 4자 이상)</span>
+      <input id="eu_pw" type="password" autocomplete="new-password" placeholder="비워두면 그대로"></div>
+  `, () => saveEditUser(id));
+}
+
+async function saveEditUser(id) {
+  const payload = {
+    full_name: document.getElementById("eu_name").value,
+    initial: document.getElementById("eu_initial").value,
+    role: document.getElementById("eu_role").value,
+    assigned_location: document.getElementById("eu_loc").value
+  };
+  const pw = document.getElementById("eu_pw").value;
+  if (pw) payload.new_password = pw;
+  const res = await fetch(`/api/admin/users/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(payload) });
+  const data = await safeJson(res);
+  if (!res.ok) return alert(data.detail || "수정 실패");
+  closeModal();
+  toast("계정 수정 완료");
+  await loadAdminData();
+}
+
+async function deleteUser(id) {
+  const u = ADMIN_USERS.find(x => x.id === id);
+  if (!u || !confirm(`계정 '${u.username}' (${u.full_name}) 을(를) 삭제할까요?\n되돌릴 수 없습니다. (잠시 막으려면 '정지'를 쓰세요)`)) return;
+  const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE", headers: authHeaders() });
+  const data = await safeJson(res);
+  if (!res.ok) return alert(data.detail || "삭제 실패");
+  toast(data.message || "삭제 완료");
+  await loadAdminData();
+}
+
+function openEditLoc(id) {
+  const l = ADMIN_LOCS.find(x => x.id === id);
+  if (!l) return;
+  openModal("위치/업체 수정", `
+    <div class="fld"><span>이름 (바꾸면 해당 위치의 금형·계정도 함께 바뀝니다)</span><input id="el_name" value="${escapeHtml(l.name)}"></div>
+    <div class="fld"><span>구분</span><select id="el_type">
+      <option value="vendor" ${l.loc_type === "vendor" ? "selected" : ""}>외부업체</option>
+      <option value="internal" ${l.loc_type === "internal" ? "selected" : ""}>사내/창고</option></select></div>
+    <div class="fld"><span>사용 여부 (비활성이면 이동 위치 목록에서 숨김)</span><select id="el_active">
+      <option value="1" ${l.is_active ? "selected" : ""}>활성</option>
+      <option value="0" ${l.is_active ? "" : "selected"}>비활성</option></select></div>
+  `, () => saveEditLoc(id));
+}
+
+async function saveEditLoc(id) {
+  const payload = {
+    name: document.getElementById("el_name").value,
+    loc_type: document.getElementById("el_type").value,
+    is_active: document.getElementById("el_active").value === "1"
+  };
+  const res = await fetch(`/api/admin/locations/${id}`, { method: "PATCH", headers: authHeaders(), body: JSON.stringify(payload) });
+  const data = await safeJson(res);
+  if (!res.ok) return alert(data.detail || "수정 실패");
+  closeModal();
+  toast("수정 완료");
+  await loadLocations();
+  await loadAdminData();
+  await loadMolds();
+}
+
+async function deleteLoc(id) {
+  const l = ADMIN_LOCS.find(x => x.id === id);
+  if (!l || !confirm(`'${l.name}' 을(를) 삭제할까요?`)) return;
+  const res = await fetch(`/api/admin/locations/${id}`, { method: "DELETE", headers: authHeaders() });
+  const data = await safeJson(res);
+  if (!res.ok) return alert(data.detail || "삭제 실패");
+  toast(data.message || "삭제 완료");
+  await loadLocations();
+  await loadAdminData();
+}
+
+function openPasswordModal() {
+  openModal("내 비밀번호 변경", `
+    <div class="fld"><span>현재 비밀번호</span><input id="pw_cur" type="password" autocomplete="current-password"></div>
+    <div class="fld"><span>새 비밀번호 (4자 이상, 6자 이상 권장)</span><input id="pw_new" type="password" autocomplete="new-password"></div>
+    <div class="fld"><span>새 비밀번호 확인</span><input id="pw_new2" type="password" autocomplete="new-password"></div>
+  `, savePassword, "변경");
+}
+
+async function savePassword() {
+  const cur = document.getElementById("pw_cur").value;
+  const nw = document.getElementById("pw_new").value;
+  const nw2 = document.getElementById("pw_new2").value;
+  if (!cur || !nw) return alert("현재 비밀번호와 새 비밀번호를 입력하세요.");
+  if (nw !== nw2) return alert("새 비밀번호 확인이 일치하지 않습니다.");
+  const res = await fetch("/api/auth/change-password", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ current_password: cur, new_password: nw })
+  });
+  const data = await safeJson(res);
+  if (!res.ok) return alert(data.detail || "변경 실패");
+  closeModal();
+  alert(data.message || "비밀번호가 변경되었습니다.");
+}
+
+// 설정 화면 새로고침: 입력한 내용을 모두 비우고 목록을 다시 불러옴
+async function resetSettings() {
+  ["newLocName", "newUsername", "newPassword", "newFullName", "newInitial"].forEach(id => {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("newLocType").value = "vendor";
+  document.getElementById("newRole").value = "vendor";
+  closeModal();
+  await loadLocations();
+  await loadAdminData();
+  toast("새로고침 완료 · 입력 내용이 초기화되었습니다.");
 }
 
 function escapeHtml(str) {
