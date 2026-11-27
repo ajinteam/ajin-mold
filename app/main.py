@@ -3,16 +3,17 @@ import hashlib
 import hmac
 import io
 import json
+import re
 import os
 import secrets
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
-from openpyxl import load_workbook
+from app.excel_parser import parse_mold_workbook
 from PIL import Image, ImageOps
 from pydantic import BaseModel
 from supabase import Client, create_client
@@ -180,11 +181,6 @@ class LocationUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class PasswordChange(BaseModel):
-    current_password: str
-    new_password: str
-
-
 class BulkMoveRequest(BaseModel):
     mold_ids: List[int]
     to_warehouse: str
@@ -198,18 +194,6 @@ class MemoUpdateRequest(BaseModel):
 
 
 # ------------------ 페이지 & 인증 ------------------
-
-@app.get("/api/debug")
-def debug_info(request: Request):
-    """배포 점검용: 서버가 실제로 받은 경로/메서드 확인 (문제 해결 후 삭제 가능)"""
-    return {
-        "path": request.scope.get("path"),
-        "query": request.scope.get("query_string", b"").decode("utf-8"),
-        "method": request.method,
-        "headers": {k: v for k, v in request.headers.items() if k.lower() not in ("authorization", "cookie")},
-        "routes": sorted({f"{','.join(sorted(r.methods))} {r.path}" for r in app.routes if hasattr(r, "methods")}),
-    }
-
 
 PATH_WRAPPER_SCRIPT = r"""<script>
 (function () {
@@ -279,27 +263,6 @@ def login(payload: LoginRequest):
 
 
 MIN_PW_LEN = 4
-
-
-@app.post("/api/auth/change-password")
-def change_password(payload: PasswordChange, user: Dict[str, Any] = Depends(get_current_user)):
-    if len(payload.new_password) < MIN_PW_LEN:
-        raise HTTPException(status_code=400, detail=f"새 비밀번호는 {MIN_PW_LEN}자 이상이어야 합니다. (6자 이상 권장)")
-    if payload.new_password == payload.current_password:
-        raise HTTPException(status_code=400, detail="현재 비밀번호와 다른 비밀번호를 입력해 주세요.")
-    ok = (
-        supabase.table("users")
-        .select("id")
-        .eq("id", user["id"])
-        .eq("password_hash", hash_password(payload.current_password))
-        .execute()
-        .data
-        or []
-    )
-    if not ok:
-        raise HTTPException(status_code=403, detail="현재 비밀번호가 올바르지 않습니다.")
-    supabase.table("users").update({"password_hash": hash_password(payload.new_password)}).eq("id", user["id"]).execute()
-    return {"message": "비밀번호가 변경되었습니다."}
 
 
 @app.get("/api/auth/me")
@@ -505,7 +468,7 @@ def admin_update_location(loc_id: int, payload: LocationUpdate, _: Dict[str, Any
     updated = supabase.table("locations").update(patch).eq("id", loc_id).execute().data or []
     if "name" in patch:
         # 이름 변경 시 해당 위치를 쓰는 금형/계정도 같이 변경
-        supabase.table("operational_molds").update({"current_warehouse": new_name}).eq("current_warehouse", old["name"]).execute()
+        supabase.table("molds").update({"current_warehouse": new_name}).eq("current_warehouse", old["name"]).execute()
         supabase.table("users").update({"assigned_location": new_name}).eq("assigned_location", old["name"]).execute()
     return {"location": updated[0] if updated else None}
 
@@ -516,7 +479,7 @@ def admin_delete_location(loc_id: int, _: Dict[str, Any] = Depends(require_maste
     if not rows:
         raise HTTPException(status_code=404, detail="위치/업체를 찾을 수 없습니다.")
     name = rows[0]["name"]
-    mold_cnt = _count_rows("operational_molds", "current_warehouse", name)
+    mold_cnt = _count_rows("molds", "current_warehouse", name)
     if mold_cnt:
         raise HTTPException(
             status_code=409,
@@ -532,116 +495,30 @@ def admin_delete_location(loc_id: int, _: Dict[str, Any] = Depends(require_maste
     return {"message": f"'{name}' 삭제 완료"}
 
 
-# ------------------ 엑셀 파싱 & 업로드 (기존 양식 호환) ------------------
+# ------------------ 금형 공통 ------------------
 
-def parse_mold_excel(file_bytes: bytes) -> List[Dict[str, str]]:
-    wb = load_workbook(filename=io.BytesIO(file_bytes), data_only=True)
-    ws = wb.active
-
-    # 병합 셀 값 채우기 (MergedCell은 값 대입이 불가하므로 병합을 먼저 해제)
-    for rng in list(ws.merged_cells.ranges):
-        min_row, min_col, max_row, max_col = rng.min_row, rng.min_col, rng.max_row, rng.max_col
-        top_val = ws.cell(min_row, min_col).value
-        ws.unmerge_cells(str(rng))
-        for r in range(min_row, max_row + 1):
-            for c in range(min_col, max_col + 1):
-                if ws.cell(r, c).value is None:
-                    ws.cell(r, c).value = top_val
-
-    model_name = ""
-    for r in range(1, min(8, ws.max_row + 1)):
-        for c in range(1, min(10, ws.max_column + 1)):
-            v = str(ws.cell(r, c).value or "").strip()
-            if "#TYPE" in v.upper():
-                parts = v.split(":", 1)
-                model_name = parts[1].strip() if len(parts) > 1 else v
-                break
-        if model_name:
-            break
-    if not model_name:
-        model_name = ws.title.strip() or "UNKNOWN-MODEL"
-
-    # 헤더 행 탐색 ('AJIN'과 'TOMYTEC' 또는 'LOCATION' 키워드)
-    header_row = None
-    col_map: Dict[str, int] = {}
-    for r in range(1, min(15, ws.max_row + 1)):
-        row_vals = [str(ws.cell(r, c).value or "").strip() for c in range(1, ws.max_column + 1)]
-        joined = " ".join(row_vals).upper()
-        if "AJIN" in joined and ("TOMYTEC" in joined or "LOCATION" in joined):
-            header_row = r
-            for idx, val in enumerate(row_vals, start=1):
-                up = val.upper()
-                if "AJIN" in up:
-                    col_map["ajin"] = idx
-                elif "D.W" in up or up == "DW":
-                    col_map["dw"] = idx
-                elif "TOMYTEC" in up or "MOLD" in up:
-                    if "mold" not in col_map:
-                        col_map["mold"] = idx
-                elif "LOCATION" in up:
-                    col_map["location"] = idx
-            break
-
-    start_row = (header_row + 2) if header_row else 7
-    ajin_col = col_map.get("ajin", 1)
-    dw_col = col_map.get("dw", 2)
-    mold_col = col_map.get("mold", 3)
-    part_col = 4
-    loc_col = col_map.get("location", 17)
-
-    last_ajin = ""
-    last_mold = ""
-    parsed: List[Dict[str, str]] = []
-
-    for r in range(start_row, ws.max_row + 1):
-        raw_ajin = str(ws.cell(r, ajin_col).value or "").strip()
-        raw_dw = str(ws.cell(r, dw_col).value or "").strip()
-        raw_mold = str(ws.cell(r, mold_col).value or "").strip()
-        raw_part = str(ws.cell(r, part_col).value or "").strip()
-        raw_loc = str(ws.cell(r, loc_col).value or "").strip()
-
-        if raw_ajin and raw_ajin.lower() != "nan":
-            last_ajin = raw_ajin.replace(".0", "")
-        if raw_mold and raw_mold.lower() != "nan":
-            last_mold = raw_mold
-
-        if not any([raw_dw, raw_part, raw_mold, raw_ajin]):
-            continue
-        if raw_part.upper() in ("TOTAL", "SUM", "합계"):
-            continue
-
-        parsed.append(
-            {
-                "model_name": model_name,
-                "ajin_no": last_ajin or "-",
-                "mold_no": last_mold or "-",
-                "dw_no": raw_dw,
-                "part_description": raw_part,
-                "current_warehouse": raw_loc,
-            }
-        )
-    return parsed
+MOLD_LIST_COLS = (
+    "id, model_name, model_name2, ajin_no, mold_no, dw_no, part_description, part_count, "
+    "current_warehouse, core_status, status_memo, updated_by, updated_at"
+)
 
 
-def _fetch_existing_molds(model_name: str) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
-    start = 0
-    while True:
-        rows = (
-            supabase.table("operational_molds")
-            .select("id, ajin_no, mold_no, dw_no, part_description, current_warehouse")
-            .eq("model_name", model_name)
-            .range(start, start + 999)
-            .execute()
-            .data
-            or []
-        )
-        out.extend(rows)
-        if len(rows) < 1000:
-            break
-        start += 1000
-    return out
+def _get_mold_or_404(mold_id: int, user: Dict[str, Any], cols: str = "*") -> Dict[str, Any]:
+    rows = supabase.table("molds").select(cols).eq("id", mold_id).execute().data or []
+    if not rows:
+        raise HTTPException(status_code=404, detail="금형을 찾을 수 없습니다.")
+    mold = rows[0]
+    if user.get("role") == "vendor" and (mold.get("current_warehouse") or "") != (user.get("assigned_location") or ""):
+        raise HTTPException(status_code=403, detail="타 보관위치 금형은 열람할 수 없습니다.")
+    return mold
 
+
+def _chunks(seq: List[Any], n: int):
+    for i in range(0, len(seq), n):
+        yield seq[i : i + n]
+
+
+# ------------------ 엑셀 업로드 (정보업로드) ------------------
 
 @app.post("/api/molds/upload-excel")
 async def upload_excel(
@@ -649,7 +526,7 @@ async def upload_excel(
     user: Dict[str, Any] = Depends(get_current_user),
 ):
     if user.get("role") == "vendor":
-        raise HTTPException(status_code=403, detail="외부업체 계정은 엑셀 일괄 업로드를 할 수 없습니다.")
+        raise HTTPException(status_code=403, detail="외부업체 계정은 엑셀 업로드를 할 수 없습니다.")
 
     fname = (file.filename or "").lower()
     if fname.endswith(".xls"):
@@ -660,254 +537,325 @@ async def upload_excel(
 
     content = await file.read()
     try:
-        items = parse_mold_excel(content)
+        sheets = parse_mold_workbook(content)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"엑셀 파일을 읽지 못했습니다: {e}")
-    if not items:
-        raise HTTPException(status_code=400, detail="업로드할 금형 데이터를 찾지 못했습니다.")
-
-    # 같은 파일 안의 중복 행 제거 (UNIQUE 제약 충돌 방지)
-    uniq: Dict[tuple, Dict[str, str]] = {}
-    for it in items:
-        key = (it["model_name"], it["ajin_no"], it["mold_no"], it["dw_no"], it["part_description"])
-        if key not in uniq:
-            uniq[key] = it
-    items = list(uniq.values())
+    if not sheets:
+        raise HTTPException(
+            status_code=400,
+            detail="금형 데이터를 찾지 못했습니다. (AJIN / D.W / TOMYTEC 제목 줄이 있는 LIST OF MOLDS 양식인지 확인하세요)",
+        )
 
     actor = user["initial"]
     ts = now_iso()
+    summary: List[Dict[str, Any]] = []
 
     try:
-        # 1) 보관위치 일괄 등록 (1회 조회 + 1회 insert)
-        wanted_locs = {it["current_warehouse"].strip() for it in items if it["current_warehouse"].strip()}
-        if wanted_locs:
+        # 보관위치 일괄 등록
+        wanted = {m["location"] for s in sheets for m in s["molds"] if m["location"]}
+        if wanted:
             have = {r["name"] for r in (supabase.table("locations").select("name").execute().data or [])}
-            missing = sorted(wanted_locs - have)
+            missing = sorted(wanted - have)
             if missing:
                 supabase.table("locations").insert(
                     [{"name": n, "loc_type": "vendor", "is_active": True} for n in missing]
                 ).execute()
 
-        # 2) 기존 금형 한 번에 조회
-        existing_map: Dict[tuple, Dict[str, Any]] = {}
-        for model in {it["model_name"] for it in items}:
-            for r in _fetch_existing_molds(model):
-                key = (model, r.get("ajin_no") or "", r.get("mold_no") or "", r.get("dw_no") or "", r.get("part_description") or "")
-                existing_map[key] = r
-
-        to_insert: List[Dict[str, Any]] = []
-        to_fill_loc: List[tuple] = []
-        for key, it in uniq.items():
-            loc_name = it["current_warehouse"].strip()
-            found = existing_map.get(key)
-            if found:
-                if not (found.get("current_warehouse") or "") and loc_name:
-                    to_fill_loc.append((found["id"], loc_name))
-            else:
-                to_insert.append(
-                    {
-                        "model_name": it["model_name"],
-                        "ajin_no": it["ajin_no"],
-                        "mold_no": it["mold_no"],
-                        "dw_no": it["dw_no"],
-                        "part_description": it["part_description"],
-                        "current_warehouse": loc_name,
-                        "core_status": "정상",
-                        "status_memo": "",
-                        "updated_by": actor,
-                        "updated_at": ts,
-                    }
+        for s in sheets:
+            model = s["model_name"]
+            existing = {
+                r["mold_key"]: r
+                for r in (
+                    supabase.table("molds")
+                    .select("id, mold_key, current_warehouse")
+                    .eq("model_name", model)
+                    .limit(5000)
+                    .execute()
+                    .data
+                    or []
                 )
+            }
 
-        # 3) 신규는 묶음 insert
-        for i in range(0, len(to_insert), 200):
-            supabase.table("operational_molds").insert(to_insert[i : i + 200]).execute()
+            rows = [
+                {
+                    "model_name": model,
+                    "model_name2": s["model_name2"],
+                    "ajin_no": m["ajin_no"],
+                    "mold_key": m["mold_key"],
+                    "mold_no": m["mold_no"],
+                    "dw_no": m["dw_no"],
+                    "part_description": m["part_description"],
+                    "part_count": m["part_count"],
+                    "s_dw": m["s_dw"],
+                    "s_mold": m["s_mold"],
+                    "s_part": m["s_part"],
+                    "details": m["details"],
+                    "sort_order": m["sort_order"],
+                }
+                for m in s["molds"]
+            ]
+            # 현재 보관위치/상태/메모는 payload에 넣지 않아 기존 값이 보존된다
+            saved: List[Dict[str, Any]] = []
+            for chunk in _chunks(rows, 200):
+                saved.extend(
+                    supabase.table("molds").upsert(chunk, on_conflict="model_name,mold_key").execute().data or []
+                )
+            id_by_key = {r["mold_key"]: r["id"] for r in saved}
 
-        # 4) 기존 중 보관위치가 비어 있던 것만 채움
-        for mold_id, loc_name in to_fill_loc:
-            supabase.table("operational_molds").update(
-                {"current_warehouse": loc_name, "updated_by": actor, "updated_at": ts}
-            ).eq("id", mold_id).execute()
+            new_ids: List[int] = []
+            loc_groups: Dict[str, List[int]] = {}
+            for m in s["molds"]:
+                mid = id_by_key.get(m["mold_key"])
+                if not mid:
+                    continue
+                old = existing.get(m["mold_key"])
+                if old is None:
+                    new_ids.append(mid)
+                if m["location"] and (old is None or not (old.get("current_warehouse") or "")):
+                    loc_groups.setdefault(m["location"], []).append(mid)
+
+            for chunk in _chunks(new_ids, 200):
+                supabase.table("molds").update({"updated_by": actor, "updated_at": ts}).in_("id", chunk).execute()
+            for loc, ids in loc_groups.items():
+                for chunk in _chunks(ids, 200):
+                    supabase.table("molds").update({"current_warehouse": loc}).in_("id", chunk).execute()
+
+            # 하위품목 전체 교체 (마지막 번호의 하위품목까지 모두 저장)
+            all_ids = list(id_by_key.values())
+            for chunk in _chunks(all_ids, 100):
+                supabase.table("mold_parts").delete().in_("mold_id", chunk).execute()
+            part_rows: List[Dict[str, Any]] = []
+            for m in s["molds"]:
+                mid = id_by_key.get(m["mold_key"])
+                if not mid:
+                    continue
+                for p in m["parts"]:
+                    part_rows.append(
+                        {
+                            "mold_id": mid,
+                            "line_no": p["line_no"],
+                            "dw_no": p["dw_no"],
+                            "mold_no": p["mold_no"],
+                            "part_description": p["part_description"],
+                            "qty": p["qty"],
+                        }
+                    )
+            for chunk in _chunks(part_rows, 500):
+                supabase.table("mold_parts").insert(chunk).execute()
+
+            summary.append(
+                {
+                    "model_name": model,
+                    "model_name2": s["model_name2"],
+                    "molds": len(s["molds"]),
+                    "new": len(new_ids),
+                    "updated": len(s["molds"]) - len(new_ids),
+                    "parts": len(part_rows),
+                }
+            )
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"DB 저장 중 오류: {e}")
 
-    unchanged = len(items) - len(to_insert) - len(to_fill_loc)
-    return {
-        "message": f"엑셀 반영 완료 (신규 {len(to_insert)}건, 위치 보충 {len(to_fill_loc)}건, 변경없음 {unchanged}건)",
-        "model_name": items[0]["model_name"],
-        "total_parsed": len(items),
-    }
+    lines = [
+        f"{x['model_name']} ({x['model_name2']}): 금형 {x['molds']}개 (신규 {x['new']}, 갱신 {x['updated']}), 하위품목 {x['parts']}건"
+        for x in summary
+    ]
+    return {"message": "엑셀 반영 완료\n" + "\n".join(lines), "summary": summary}
 
 
-# ------------------ 검색 · 조회 · QR 스캔 lookup ------------------
+@app.delete("/api/admin/models")
+def admin_delete_model(name: str = Query(...), _: Dict[str, Any] = Depends(require_master)):
+    name = name.strip()
+    ids = [r["id"] for r in (supabase.table("molds").select("id").eq("model_name", name).limit(5000).execute().data or [])]
+    if not ids:
+        raise HTTPException(status_code=404, detail="해당 모델이 없습니다.")
+    # 사진 파일도 함께 정리 (실패해도 DB 삭제는 진행)
+    try:
+        paths: List[str] = []
+        for chunk in _chunks(ids, 100):
+            for r in supabase.table("mold_photos").select("storage_path, thumb_path").in_("mold_id", chunk).execute().data or []:
+                paths += [p for p in (r.get("storage_path"), r.get("thumb_path")) if p]
+        for chunk in _chunks(paths, 100):
+            supabase.storage.from_(STORAGE_BUCKET).remove(chunk)
+    except Exception:
+        pass
+    supabase.table("molds").delete().eq("model_name", name).execute()
+    return {"message": f"모델 '{name}' 및 금형 {len(ids)}개 삭제 완료"}
+
+
+# ------------------ 모델 목록 · 검색 · 상세 ------------------
+
+@app.get("/api/models")
+def list_models(user: Dict[str, Any] = Depends(get_current_user)):
+    agg: Dict[str, Dict[str, Any]] = {}
+    start = 0
+    while True:
+        q = supabase.table("molds").select("model_name, model_name2").order("id")
+        if user.get("role") == "vendor":
+            q = q.eq("current_warehouse", (user.get("assigned_location") or "").strip())
+        page = q.range(start, start + 999).execute().data or []
+        for r in page:
+            a = agg.setdefault(r["model_name"], {"model_name": r["model_name"], "model_name2": r.get("model_name2") or "", "count": 0})
+            a["count"] += 1
+        if len(page) < 1000:
+            break
+        start += 1000
+    return {"models": sorted(agg.values(), key=lambda x: x["model_name"])}
+
 
 @app.get("/api/molds")
 def search_molds(
-    q: str = Query(default=""),
+    model: List[str] = Query(default=[]),
+    ajin: str = Query(default=""),
+    mold: str = Query(default=""),
+    dw: str = Query(default=""),
+    part: str = Query(default=""),
     warehouse: str = Query(default=""),
-    limit: int = Query(default=30, ge=1, le=100),
+    q: str = Query(default=""),
+    limit: int = Query(default=100, ge=1, le=300),
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ):
-    query = supabase.table("operational_molds").select(
-        "id, model_name, ajin_no, mold_no, dw_no, part_description, current_warehouse, core_status, status_memo, updated_by, updated_at"
-    )
+    query = supabase.table("molds").select(MOLD_LIST_COLS, count="exact")
 
     # 외부업체 계정은 자사 보관위치 금형만 열람
     if user.get("role") == "vendor":
-        assigned_loc = (user.get("assigned_location") or "").strip()
-        if not assigned_loc:
-            return {"items": [], "count": 0}
-        query = query.eq("current_warehouse", assigned_loc)
+        assigned = (user.get("assigned_location") or "").strip()
+        if not assigned:
+            return {"items": [], "total": 0, "offset": offset}
+        query = query.eq("current_warehouse", assigned)
     elif warehouse.strip():
         query = query.eq("current_warehouse", warehouse.strip())
 
-    term = q.strip()
+    models = [m.strip() for m in model if m and m.strip()]
+    if models:
+        query = query.in_("model_name", models)
+
+    def like(col: str, text: str):
+        nonlocal query
+        text = text.strip()
+        if text:
+            query = query.ilike(col, f"*{text}*")
+
+    like("ajin_no", ajin.strip().lstrip("#"))
+    like("s_mold", mold)      # 토미텍 번호 (하위품목 포함)
+    like("s_dw", dw)          # 도번 (하위품목 포함)
+    like("s_part", part)      # 제품(부품명) (하위품목 포함)
+
+    term = re.sub(r"[,()]", " ", q).strip()
     if term:
-        # 모델명, 아진No, 몰드No, 품명, D.W No 통합 검색
-        pattern = f"*{term}*"
+        pat = f"*{term}*"
         query = query.or_(
-            f"model_name.ilike.{pattern},"
-            f"ajin_no.ilike.{pattern},"
-            f"mold_no.ilike.{pattern},"
-            f"part_description.ilike.{pattern},"
-            f"dw_no.ilike.{pattern}"
+            ",".join(f"{c}.ilike.{pat}" for c in ("ajin_no", "mold_no", "dw_no", "part_description", "s_mold", "s_dw", "s_part"))
         )
 
-    rows = query.order("id", desc=False).range(offset, offset + limit - 1).execute().data or []
-    return {"items": rows, "count": len(rows)}
+    res = query.order("id").range(offset, offset + limit - 1).execute()
+    rows = res.data or []
+    total = res.count if getattr(res, "count", None) is not None else len(rows)
+    return {"items": rows, "total": total, "offset": offset}
 
 
 @app.get("/api/molds/{mold_id}")
 def get_mold_detail(mold_id: int, user: Dict[str, Any] = Depends(get_current_user)):
-    rows = supabase.table("operational_molds").select("*").eq("id", mold_id).execute().data or []
-    if not rows:
-        raise HTTPException(status_code=404, detail="금형을 찾을 수 없습니다.")
-    mold = rows[0]
-
-    if user.get("role") == "vendor":
-        if mold.get("current_warehouse") != user.get("assigned_location"):
-            raise HTTPException(status_code=403, detail="타 보관위치 금형은 열람할 수 없습니다.")
-
-    history = (
-        supabase.table("transfer_history")
-        .select("*")
-        .eq("mold_id", mold_id)
-        .order("created_at", desc=True)
-        .limit(20)
-        .execute()
-        .data
-        or []
+    mold = _get_mold_or_404(mold_id, user)
+    parts = (
+        supabase.table("mold_parts").select("line_no, dw_no, mold_no, part_description, qty")
+        .eq("mold_id", mold_id).order("line_no").execute().data or []
     )
     photos = (
         supabase.table("mold_photos")
-        .select("*")
-        .eq("mold_id", mold_id)
-        .order("uploaded_at", desc=True)
-        .execute()
-        .data
-        or []
+        .select("id, public_url, thumb_url, file_size_kb, uploaded_by, taken_at, uploaded_at")
+        .eq("mold_id", mold_id).order("taken_at", desc=True).limit(300).execute().data or []
     )
-    return {"mold": mold, "history": history, "photos": photos}
+    memos = (
+        supabase.table("mold_memos").select("id, memo, core_status, actor_initial, created_at")
+        .eq("mold_id", mold_id).order("created_at", desc=True).limit(100).execute().data or []
+    )
+    history = (
+        supabase.table("transfer_history").select("from_warehouse, to_warehouse, core_status, memo, actor_initial, created_at")
+        .eq("mold_id", mold_id).order("created_at", desc=True).limit(30).execute().data or []
+    )
+    return {"mold": mold, "parts": parts, "photos": photos, "memos": memos, "history": history}
 
 
-# ------------------ QR 다중 스캔 일괄 이동 & 메모 ------------------
+# ------------------ 선택한 금형 일괄 이동 & 메모 ------------------
 
 @app.post("/api/molds/bulk-move")
 def bulk_move_molds(payload: BulkMoveRequest, user: Dict[str, Any] = Depends(get_current_user)):
-    if not payload.mold_ids:
+    ids = sorted({int(i) for i in payload.mold_ids})
+    if not ids:
         raise HTTPException(status_code=400, detail="이동할 금형을 1개 이상 선택해 주세요.")
+    if len(ids) > 300:
+        raise HTTPException(status_code=400, detail="한 번에 최대 300개까지 이동할 수 있습니다.")
     to_wh = payload.to_warehouse.strip()
     if not to_wh:
         raise HTTPException(status_code=400, detail="이동할 위치(업체/창고)를 선택해 주세요.")
+    if not (supabase.table("locations").select("id").eq("name", to_wh).eq("is_active", True).execute().data or []):
+        raise HTTPException(status_code=400, detail="등록되지 않았거나 비활성인 위치입니다.")
+
+    molds = supabase.table("molds").select("id, current_warehouse, core_status").in_("id", ids).execute().data or []
+    if not molds:
+        raise HTTPException(status_code=404, detail="선택한 금형을 찾을 수 없습니다.")
+    if user.get("role") == "vendor":
+        assigned = user.get("assigned_location") or ""
+        bad = [m["id"] for m in molds if (m.get("current_warehouse") or "") != assigned]
+        if bad:
+            raise HTTPException(status_code=403, detail="자사 보관 금형이 아닌 항목이 포함되어 있습니다.")
 
     actor = user["initial"]
     ts = now_iso()
-    moved_ids: List[int] = []
+    status = (payload.core_status or "").strip()
+    memo = payload.memo.strip()
 
-    for mid in payload.mold_ids:
-        rows = supabase.table("operational_molds").select("*").eq("id", mid).execute().data or []
-        if not rows:
-            continue
-        mold = rows[0]
-        from_wh = mold.get("current_warehouse") or ""
+    upd: Dict[str, Any] = {"current_warehouse": to_wh, "updated_by": actor, "updated_at": ts}
+    if status:
+        upd["core_status"] = status
+    found_ids = [m["id"] for m in molds]
+    supabase.table("molds").update(upd).in_("id", found_ids).execute()
 
-        if user.get("role") == "vendor" and from_wh != user.get("assigned_location"):
-            raise HTTPException(status_code=403, detail=f"금형 ID {mid}는 자사 보유 금형이 아닙니다.")
-
-        update_data: Dict[str, Any] = {
-            "current_warehouse": to_wh,
-            "updated_by": actor,
-            "updated_at": ts,
-        }
-        if payload.core_status:
-            update_data["core_status"] = payload.core_status.strip()
-        if payload.memo.strip():
-            update_data["status_memo"] = payload.memo.strip()
-
-        supabase.table("operational_molds").update(update_data).eq("id", mid).execute()
-
-        supabase.table("transfer_history").insert(
+    supabase.table("transfer_history").insert(
+        [
             {
-                "mold_id": mid,
-                "from_warehouse": from_wh,
+                "mold_id": m["id"],
+                "from_warehouse": m.get("current_warehouse") or "",
                 "to_warehouse": to_wh,
-                "core_status": update_data.get("core_status") or mold.get("core_status") or "정상",
-                "memo": payload.memo.strip(),
+                "core_status": status or m.get("core_status") or "",
+                "memo": memo,
                 "actor_initial": actor,
                 "created_at": ts,
             }
-        ).execute()
-        moved_ids.append(mid)
+            for m in molds
+        ]
+    ).execute()
 
-    return {
-        "message": f"{len(moved_ids)}건 위치 이동 완료 (기록자: {actor})",
-        "moved_ids": moved_ids,
-        "actor_initial": actor,
-    }
+    return {"message": f"{len(found_ids)}건 위치 이동 완료 (기록자: {actor})", "moved_ids": found_ids, "actor_initial": actor}
 
 
 @app.post("/api/molds/{mold_id}/memo")
-def update_mold_memo(mold_id: int, payload: MemoUpdateRequest, user: Dict[str, Any] = Depends(get_current_user)):
-    rows = supabase.table("operational_molds").select("*").eq("id", mold_id).execute().data or []
-    if not rows:
-        raise HTTPException(status_code=404, detail="금형을 찾을 수 없습니다.")
-    mold = rows[0]
-    if user.get("role") == "vendor" and mold.get("current_warehouse") != user.get("assigned_location"):
-        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+def save_mold_memo(mold_id: int, payload: MemoUpdateRequest, user: Dict[str, Any] = Depends(get_current_user)):
+    mold = _get_mold_or_404(mold_id, user, "id, current_warehouse, core_status")
+    memo = payload.memo.strip()
+    status = (payload.core_status or "").strip()
+    if not memo and not status:
+        raise HTTPException(status_code=400, detail="메모 또는 상태를 입력해 주세요.")
 
     actor = user["initial"]
     ts = now_iso()
-    memo_text = payload.memo.strip()
-    new_status = (payload.core_status or mold.get("core_status") or "정상").strip()
+    new_status = status or mold.get("core_status") or "정상"
 
-    supabase.table("operational_molds").update(
-        {
-            "status_memo": memo_text,
-            "core_status": new_status,
-            "updated_by": actor,
-            "updated_at": ts,
-        }
-    ).eq("id", mold_id).execute()
-
-    supabase.table("transfer_history").insert(
-        {
-            "mold_id": mold_id,
-            "from_warehouse": mold.get("current_warehouse") or "",
-            "to_warehouse": mold.get("current_warehouse") or "",
-            "core_status": new_status,
-            "memo": f"[메모/상태] {memo_text}",
-            "actor_initial": actor,
-            "created_at": ts,
-        }
+    supabase.table("mold_memos").insert(
+        {"mold_id": mold_id, "memo": memo, "core_status": new_status, "actor_initial": actor, "created_at": ts}
     ).execute()
-
+    upd: Dict[str, Any] = {"core_status": new_status, "updated_by": actor, "updated_at": ts}
+    if memo:
+        upd["status_memo"] = memo
+    supabase.table("molds").update(upd).eq("id", mold_id).execute()
     return {"message": f"메모 저장 완료 ({actor})", "updated_by": actor, "updated_at": ts}
 
 
-# ------------------ 사진 최적화 업로드(리사이징+압축) & 날짜순 조회 ------------------
+# ------------------ 사진 업로드(리사이징+썸네일) ------------------
 
 def compress_photo(raw_bytes: bytes, max_side: int = 1280, quality: int = 72) -> bytes:
     img = Image.open(io.BytesIO(raw_bytes))
@@ -929,42 +877,58 @@ def compress_photo(raw_bytes: bytes, max_side: int = 1280, quality: int = 72) ->
     return out.getvalue()
 
 
+def _parse_taken_at(text: Optional[str]) -> Optional[datetime]:
+    if not text:
+        return None
+    try:
+        dt = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if dt.year < 2000 or dt > now + timedelta(days=1):
+        return None
+    return dt
+
+
 @app.post("/api/molds/{mold_id}/photos")
 async def upload_mold_photo(
     mold_id: int,
     file: UploadFile = File(...),
+    taken_at: Optional[str] = Form(default=None),
     user: Dict[str, Any] = Depends(get_current_user),
 ):
-    rows = supabase.table("operational_molds").select("id, model_name, ajin_no, mold_no, current_warehouse").eq("id", mold_id).execute().data or []
-    if not rows:
-        raise HTTPException(status_code=404, detail="금형을 찾을 수 없습니다.")
-    mold = rows[0]
-    if user.get("role") == "vendor" and mold.get("current_warehouse") != user.get("assigned_location"):
-        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+    _get_mold_or_404(mold_id, user, "id, current_warehouse")
 
     raw = await file.read()
     if not raw:
         raise HTTPException(status_code=400, detail="빈 이미지 파일입니다.")
-
     try:
-        optimized = compress_photo(raw, max_side=1280, quality=72)
+        full = compress_photo(raw, max_side=1280, quality=72)
+        thumb = compress_photo(full, max_side=360, quality=62)
     except Exception:
         raise HTTPException(status_code=400, detail="지원되지 않는 이미지 형식입니다.")
 
     actor = user["initial"]
-    ts = now_iso()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    safe_label = f"{mold['model_name']}_{mold['ajin_no']}_{mold['mold_no']}".replace("/", "_").replace(" ", "_")
-    storage_path = f"mold_{mold_id}/{stamp}_{actor}_{safe_label}_{secrets.token_hex(3)}.jpg"
+    now = datetime.now(timezone.utc)
+    taken = _parse_taken_at(taken_at) or now
+    base = f"mold_{mold_id}/{now.strftime('%Y%m%d_%H%M%S')}_{secrets.token_hex(3)}"
+    storage_path, thumb_path = f"{base}.jpg", f"{base}_t.jpg"
 
-    supabase.storage.from_(STORAGE_BUCKET).upload(
-        path=storage_path,
-        file=optimized,
-        file_options={"content-type": "image/jpeg", "upsert": "false"},
-    )
-    public_url = supabase.storage.from_(STORAGE_BUCKET).get_public_url(storage_path)
-    size_kb = max(1, len(optimized) // 1024)
+    try:
+        bucket = supabase.storage.from_(STORAGE_BUCKET)
+        bucket.upload(path=storage_path, file=full, file_options={"content-type": "image/jpeg", "upsert": "false"})
+        bucket.upload(path=thumb_path, file=thumb, file_options={"content-type": "image/jpeg", "upsert": "false"})
+        public_url = bucket.get_public_url(storage_path)
+        thumb_url = bucket.get_public_url(thumb_path)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"사진 저장 실패: {e} (Supabase Storage에 '{STORAGE_BUCKET}' 버킷이 Public으로 만들어져 있는지 확인하세요)",
+        )
 
+    size_kb = max(1, len(full) // 1024)
     inserted = (
         supabase.table("mold_photos")
         .insert(
@@ -972,19 +936,18 @@ async def upload_mold_photo(
                 "mold_id": mold_id,
                 "storage_path": storage_path,
                 "public_url": public_url,
+                "thumb_path": thumb_path,
+                "thumb_url": thumb_url,
                 "file_size_kb": size_kb,
                 "uploaded_by": actor,
-                "uploaded_at": ts,
+                "taken_at": taken.isoformat(),
+                "uploaded_at": now.isoformat(),
             }
         )
         .execute()
         .data
     )
-
-    return {
-        "message": f"사진 최적화 업로드 완료 ({size_kb}KB, {actor})",
-        "photo": inserted[0],
-    }
+    return {"message": f"사진 업로드 완료 ({size_kb}KB, {actor})", "photo": inserted[0]}
 
 
 # ------------------ 무료 플랜 유지용 경량 헬스체크 ------------------

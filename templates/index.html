@@ -122,42 +122,71 @@
       display: block;
       margin-bottom: 4px;
     }
-    /* BY-482BT 유포감열지 라벨 인쇄 영역 (기본 80x50mm, JS로 동적 변경) */
-    #printArea { display: none; }
-    @media print {
-      body * { visibility: hidden; }
-      #printArea, #printArea * { visibility: visible; }
-      #printArea {
-        display: block;
-        position: fixed;
-        left: 0;
-        top: 0;
-      }
-      .label-sheet {
-        width: var(--label-w, 80mm);
-        height: var(--label-h, 50mm);
-        page-break-after: always;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 2mm 3mm;
-        border: 0.2mm dashed #999;
-        overflow: hidden;
-      }
-      .label-qr img {
-        width: var(--qr-size, 36mm);
-        height: var(--qr-size, 36mm);
-      }
-      .label-text {
-        flex: 1;
-        padding-left: 2.5mm;
-        font-size: 9pt;
-        line-height: 1.25;
-        word-break: break-all;
-      }
-      .label-title { font-weight: 800; font-size: 10.5pt; }
-    }
-
+    .between { justify-content: space-between; }
+    .small { font-size: 12px; }
+    .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .btnrow > button { flex: 1 1 120px; }
+    .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0 4px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; max-height: 170px; overflow: auto; }
+    button.mchip { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-height: 0; padding: 7px 12px; border-radius: 12px; text-align: left; }
+    button.mchip small { font-weight: 500; opacity: .8; }
+    button.mchip .m2 { font-size: 11px; font-weight: 500; opacity: .85; }
+    button.mchip.on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+    #headerControls button.active { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+    .tblwrap { overflow-x: auto; }
+    table.mt { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .mt th { background: #e8eef6; border: 1px solid #cbd5e1; padding: 8px 6px; white-space: nowrap; text-align: center; }
+    .mt td { border: 1px solid #dbe3ee; padding: 6px 8px; vertical-align: middle; }
+    .mt tbody tr:nth-child(even) td { background: #f6f9fd; }
+    .mt td.idc { text-align: center; cursor: pointer; user-select: none; font-weight: 700; background: #e8eef6 !important; min-width: 58px; white-space: nowrap; }
+    .mt td.idc:hover { background: #cfe0ff !important; }
+    .mt tr.sel td { background: #dbeafe !important; }
+    .mt tr.sel td.idc { background: #1d4ed8 !important; color: #fff; }
+    .idbox { display: inline-block; width: 17px; height: 17px; border: 2px solid #94a3b8; border-radius: 4px; margin-right: 5px; vertical-align: -3px; font-size: 11px; line-height: 13px; text-align: center; background: #fff; color: #1d4ed8; }
+    .mt tr.sel .idbox { border-color: #fff; }
+    .mt td.empty { text-align: center; color: var(--muted); padding: 24px 8px; }
+    .stwrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .sbtns { display: flex; gap: 4px; flex-wrap: wrap; }
+    .sbtns button { padding: 5px 9px; font-size: 12px; min-height: 0; border-color: #94a3b8; background: #f8fafc; }
+    .sbtns button:hover { background: #dbeafe; }
+    button.mini { padding: 6px 10px; font-size: 12px; min-height: 0; }
+    button.danger { background: #dc2626; border-color: #dc2626; color: #fff; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; background: #eef2ff; color: #1e3a8a; border-radius: 999px; padding: 4px 6px 4px 10px; margin: 3px; font-size: 12px; font-weight: 600; }
+    .chip button { border: 0; background: #c7d2fe; color: #1e3a8a; border-radius: 50%; width: 24px; height: 24px; min-height: 0; padding: 0; line-height: 1; font-size: 12px; }
+    .locrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
+    .locbtns { display: flex; gap: 6px; }
+    #modalBack { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 10px; }
+    #modalBox { background: #fff; border-radius: 12px; padding: 14px; width: 100%; max-width: 440px; max-height: 92vh; display: flex; flex-direction: column; }
+    #modalBox.wide { max-width: 680px; }
+    .mhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .mhead h3 { margin: 0; font-size: 17px; }
+    #modalBody { overflow: auto; flex: 1 1 auto; }
+    .mfoot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+    .mfoot > button { flex: 0 1 auto; min-width: 90px; }
+    .fld { display: block; margin-bottom: 10px; }
+    .fld > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+    .mh { background: #f1f5f9; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 14px; line-height: 1.5; }
+    dl.kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 10px; margin: 8px 0; }
+    dl.kv dt { color: var(--muted); font-size: 13px; }
+    dl.kv dd { margin: 0; font-weight: 600; word-break: break-all; }
+    table.mini-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .mini-t th, .mini-t td { border-bottom: 1px solid #e5e7eb; padding: 7px 6px; text-align: left; }
+    .mini-t tr.main td { background: #eef2ff; font-weight: 600; }
+    ul.log { list-style: none; padding: 0; margin: 4px 0 12px; font-size: 13px; }
+    ul.log li { border-bottom: 1px solid #e5e7eb; padding: 7px 0; }
+    .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+    button.thumb { padding: 0; min-height: 0; border: 2px solid transparent; border-radius: 8px; overflow: hidden; background: #f3f4f6; font-weight: 400; }
+    button.thumb img { width: 100%; height: 84px; object-fit: cover; display: block; }
+    button.thumb span { display: block; font-size: 10px; padding: 3px 2px; color: #334155; }
+    button.thumb.on { border-color: #1d4ed8; }
+    .photoview { background: #0f172a; color: #fff; border-radius: 10px; padding: 8px; margin-bottom: 10px; text-align: center; }
+    .photoview img { max-width: 100%; max-height: 52vh; border-radius: 6px; }
+    .photoview a { color: #93c5fd; }
+    .upl { display: block; padding: 12px 14px; border-radius: 8px; background: #0f766e; color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; text-align: center; }
+    .upl.alt { background: #334155; }
+    .upl input { display: none; }
+    pre.result { background: #f1f5f9; border-radius: 8px; padding: 10px; font-size: 13px; white-space: pre-wrap; margin: 10px 0 0; }
+    ul.rules { margin: 10px 0 0; padding-left: 18px; line-height: 1.7; }
     /* 토스트 */
     #toast {
       position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
@@ -166,24 +195,19 @@
       max-width: 90vw; text-align: center;
     }
     .muted { color: var(--muted); }
-    .grp-model { background:#0f172a; color:#fff; padding:8px 12px; border-radius:8px; margin:14px 0 6px; display:flex; justify-content:space-between; align-items:center; font-weight:700; }
-    .grp-model small { font-weight:500; opacity:.8; }
-    .grp-ajin { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; background:#eef2ff; border-radius:8px; padding:8px 12px; margin:8px 0 2px; font-size:14px; }
-    .mrow { display:flex; gap:8px; align-items:center; border-bottom:1px solid #e5e7eb; padding:8px 4px; }
-    .mrow .minfo { flex:1; min-width:0; font-size:14px; }
-    .mrow .mmeta { font-size:12px; color:var(--muted); margin-top:2px; word-break:break-all; }
-    .mrow .mbtns { display:flex; gap:6px; flex:0 0 auto; }
-    button.mini { padding:6px 10px; font-size:12px; min-height:0; }
-    button.queued { background:#fee2e2; border-color:#fca5a5; color:#991b1b; }
-    button.danger { background:#dc2626; border-color:#dc2626; color:#fff; }
-    .chip { display:inline-flex; align-items:center; gap:6px; background:#eef2ff; color:#1e3a8a; border-radius:999px; padding:4px 6px 4px 10px; margin:3px; font-size:12px; font-weight:600; }
-    .chip button { border:0; background:#c7d2fe; color:#1e3a8a; border-radius:50%; width:24px; height:24px; min-height:0; padding:0; line-height:1; font-size:12px; }
-    .locrow { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid #e5e7eb; }
-    .locbtns { display:flex; gap:6px; }
-    #modalBack { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200; display:flex; align-items:center; justify-content:center; padding:12px; }
-    #modalBox { background:#fff; border-radius:12px; padding:16px; width:100%; max-width:420px; max-height:90vh; overflow:auto; }
-    .fld { display:block; margin-bottom:10px; }
-    .fld > span { display:block; font-size:12px; color:var(--muted); margin-bottom:3px; }
+    @media (max-width: 820px) {
+      table.mt thead { display: none; }
+      table.mt, .mt tbody, .mt tr, .mt td { display: block; width: 100%; }
+      .mt tr.mr { border: 1px solid #cbd5e1; border-radius: 12px; margin-bottom: 10px; overflow: hidden; background: #fff; }
+      .mt td { border: 0; padding: 4px 10px; }
+      .mt td[data-label]::before { content: attr(data-label); display: inline-block; min-width: 96px; color: var(--muted); font-size: 12px; font-weight: 600; }
+      .mt td.idc { text-align: left; padding: 12px 10px; font-size: 15px; }
+      .mt td.idc::before { content: "선택 · ID"; min-width: 80px; font-size: 12px; font-weight: 600; opacity: .8; }
+      .mt td.empty { display: block; }
+      .sbtns { width: 100%; margin-top: 4px; }
+      .sbtns button { flex: 1 1 22%; min-height: 40px; }
+      dl.kv { grid-template-columns: 120px 1fr; }
+    }
     /* ===== 모바일 최적화 ===== */
     @media (max-width: 640px) {
       .container { margin: 8px auto; padding: 0 8px 48px; }
@@ -215,9 +239,6 @@
       .photo-card img { height: 110px; }
       #scannerCard #qrReader { max-width: 100%; }
       .moldChk { width: 22px; height: 22px; min-height: 0; vertical-align: middle; }
-      .mrow { flex-wrap: wrap; }
-      .mrow .mbtns { width: 100%; }
-      .mrow .mbtns button { flex: 1 1 50%; }
       .locbtns { width: 100%; }
       .locbtns button { flex: 1 1 50%; }
     }
@@ -230,10 +251,9 @@
     <span id="userBanner" class="badge hidden"></span>
   </div>
   <div id="headerControls" class="row hidden" style="flex:0 0 auto;">
-    <button onclick="switchTab('field')">현장/스캔</button>
-    <button id="btnTabPc" onclick="switchTab('pc')">PC관리/라벨</button>
-    <button id="btnTabMaster" class="hidden" onclick="switchTab('master')">마스터설정</button>
-    <button onclick="openPasswordModal()">비밀번호 변경</button>
+    <button data-tab="field" class="active" onclick="switchTab('field')">금형조회</button>
+    <button data-tab="pc" id="btnTabPc" onclick="switchTab('pc')">정보업로드</button>
+    <button data-tab="master" id="btnTabMaster" class="hidden" onclick="switchTab('master')">마스터설정</button>
     <button onclick="logout()">로그아웃</button>
   </div>
 </header>
@@ -257,34 +277,43 @@
   <!-- 메인 앱 영역 -->
   <div id="appBox" class="hidden">
 
-    <!-- 1. 현장 / 외부업체 초간단 화면 -->
+    <!-- 1. 금형 조회 -->
     <div id="tabField">
-      <div class="big-actions">
-        <button class="primary big-btn" onclick="openScanner('move')">📷 QR 연속 스캔 · 이동</button>
-        <button class="accent big-btn" onclick="openScanner('photo')">📸 QR 스캔 · 사진촬영</button>
-        <button class="big-btn" onclick="stopScanner(); document.getElementById('searchInput').focus();">🔎 검색 (모델/아진/몰드/품명)</button>
-        <label class="big-btn" style="border:1px solid var(--border); background:#fff; cursor:pointer; display:block; font-weight:600;">
-          🖼️ 사진으로 QR 인식 (카메라 권한 없이)
-          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)" />
-        </label>
-      </div>
 
-      <!-- QR 카메라 스캐너 박스 -->
-      <div id="scannerCard" class="card hidden">
-        <div class="row" style="justify-content:space-between; margin-bottom:8px;">
-          <strong id="scannerModeLabel">QR 카메라 스캔</strong>
-          <button onclick="stopScanner()" style="flex:0 0 auto;">카메라 닫기</button>
+      <!-- 모델 선택 + 검색 -->
+      <div class="card">
+        <div class="row between">
+          <strong>업로드된 모델 <span class="muted small">(눌러서 선택 · 복수 선택 가능)</span></strong>
+          <span style="flex:0 0 auto;">
+            <button class="mini" onclick="selectAllModels(true)">전체 선택</button>
+            <button class="mini" onclick="selectAllModels(false)">선택 해제</button>
+          </span>
         </div>
-        <div id="qrReader" style="width:100%; max-width:420px; margin:auto;"></div>
+        <div id="modelChips" class="chips"></div>
+        <div class="muted small" id="modelSelInfo"></div>
+
+        <div class="filters" onkeydown="if(event.key==='Enter') loadMolds(true)">
+          <input id="fAjin" type="text" placeholder="아진 No (예: 6)" />
+          <input id="fMold" type="text" placeholder="토미 No (MOLD No)" />
+          <input id="fDw" type="text" placeholder="도번 (D.W No)" />
+          <input id="fPart" type="text" placeholder="제품 (부품명)" />
+          <select id="filterLoc"><option value="">전체 보관위치</option></select>
+        </div>
+        <div class="btnrow">
+          <button class="primary" onclick="loadMolds(true)">🔍 조회 (선택 모델 불러오기)</button>
+          <button onclick="resetFilters()">초기화</button>
+          <button onclick="refreshAll()">🔄 새로고침</button>
+        </div>
+        <div class="muted small" style="margin-top:6px;">모델을 선택하지 않고 조회하면 전체 모델에서 검색합니다. 아진·토미·도번·제품은 하위 품목까지 함께 찾습니다.</div>
       </div>
 
-      <!-- 다중 스캔 이동 대기 바구니 -->
+      <!-- 선택된 금형 이동 -->
       <div id="scanQueueCard" class="card">
-        <div class="row" style="justify-content:space-between;">
-          <strong>일괄 이동 대기 목록 (<span id="queueCount">0</span>건) · 기록자: <span class="actorLabel"></span></strong>
-          <button onclick="clearQueue()" style="flex:0 0 auto;">전체 비우기</button>
+        <div class="row between">
+          <strong>선택된 금형 (<span id="queueCount">0</span>건) · 기록자: <span class="actorLabel"></span></strong>
+          <button class="mini" onclick="clearQueue()" style="flex:0 0 auto;">전체 비우기</button>
         </div>
-        <div id="queueList" style="margin:8px 0; font-size:13px; color:var(--muted);">스캔하거나 아래 목록에서 '이동담기'를 누르세요. (담긴 항목은 ✕ 로 하나씩 취소할 수 있습니다)</div>
+        <div id="queueList" style="margin:8px 0; font-size:13px; color:var(--muted);">표의 ID를 누르면 선택/취소됩니다. 선택한 금형은 아진번호 단위로 한 번에 이동할 수 있습니다.</div>
         <div class="row">
           <select id="bulkTargetLoc"></select>
           <input id="bulkStatus" type="text" placeholder="상태 (예: 정상, 수리요청)" />
@@ -293,80 +322,66 @@
         </div>
       </div>
 
-      <!-- 통합 검색 및 금형 목록 -->
-      <div class="card">
-        <div class="row" style="margin-bottom:10px;">
-          <input id="searchInput" type="text" placeholder="모델명, 아진No, 몰드No, 품명 검색..." onkeydown="if(event.key==='Enter') loadMolds()" />
-          <select id="filterLoc" onchange="loadMolds()">
-            <option value="">전체 보관위치/업체</option>
-          </select>
-          <button class="primary" onclick="loadMolds()" style="flex:0 0 auto;">조회</button>
+      <!-- QR 스캔 -->
+      <div class="big-actions">
+        <button class="primary big-btn" onclick="openScanner('move')">📷 QR 연속 스캔 · 선택</button>
+        <button class="accent big-btn" onclick="openScanner('photo')">📸 QR 스캔 · 사진정보</button>
+        <label class="big-btn" style="border:1px solid var(--border); background:#fff; cursor:pointer; display:block; font-weight:600;">
+          🖼️ 사진으로 QR 인식 (카메라 권한 없이)
+          <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="scanFromPhoto(this)" />
+        </label>
+      </div>
+      <div id="scannerCard" class="card hidden">
+        <div class="row" style="justify-content:space-between; margin-bottom:8px;">
+          <strong id="scannerModeLabel">QR 카메라 스캔</strong>
+          <button onclick="stopScanner()" style="flex:0 0 auto;">카메라 닫기</button>
         </div>
-        <div id="moldList"></div>
+        <div id="qrReader" style="width:100%; max-width:420px; margin:auto;"></div>
       </div>
 
-      <!-- 선택 금형 상세 / 메모 / 사진첩(업로드 날짜순) -->
-      <div id="detailCard" class="card hidden">
-        <div class="row" style="justify-content:space-between;">
-          <h3 id="detailTitle" style="margin:0;"></h3>
-          <button onclick="document.getElementById('detailCard').classList.add('hidden')" style="flex:0 0 auto;">닫기</button>
+      <!-- 금형 목록 -->
+      <div class="card">
+        <div class="row between" style="margin-bottom:8px;">
+          <span id="listInfo" class="muted small"></span>
+          <button class="mini" onclick="selectVisible()" style="flex:0 0 auto;">화면 전체 선택</button>
         </div>
-        <p id="detailMeta" style="font-size:13px; color:var(--muted);"></p>
-
-        <div class="row" style="margin-bottom:12px;">
-          <input id="detailStatusInput" type="text" placeholder="상태" />
-          <input id="detailMemoInput" type="text" placeholder="메모 입력..." />
-          <button class="primary" onclick="saveDetailMemo()" style="flex:0 0 auto;">메모 저장 (<span class="actorLabel"></span>)</button>
+        <div class="tblwrap">
+          <table class="mt">
+            <thead>
+              <tr>
+                <th>ID</th><th>모델명</th><th>모델명2</th><th>AJIN No</th><th>D.W No</th><th>MOLD No</th>
+                <th>부품 설명 명세</th><th>현재 보관 위치</th><th>금형/코어 상태</th><th>최종 변경자</th>
+              </tr>
+            </thead>
+            <tbody id="moldTableBody"></tbody>
+          </table>
         </div>
-
-        <hr />
-        <div class="row" style="justify-content:space-between; margin:10px 0;">
-          <strong>금형 사진 (업로드 날짜 최신순)</strong>
-          <div style="display:flex; gap:8px; flex:0 0 auto; flex-wrap:wrap;">
-            <label class="accent" style="padding:10px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px;">
-              📷 촬영
-              <input type="file" accept="image/*" capture="environment" style="display:none;" onchange="uploadPhoto(this)" />
-            </label>
-            <label class="accent" style="padding:10px 12px; border-radius:8px; cursor:pointer; color:#fff; font-size:13px; background:#334155; border-color:#334155;">
-              🖼️ 앨범에서 선택
-              <input type="file" accept="image/*" style="display:none;" onchange="uploadPhoto(this)" />
-            </label>
-          </div>
-        </div>
-        <div id="photoList" class="photo-grid"></div>
-
-        <hr style="margin-top:14px;" />
-        <strong>최근 이동/메모 이력</strong>
-        <ul id="historyList" style="font-size:13px; padding-left:18px;"></ul>
+        <button id="btnMore" class="hidden" style="width:100%; margin-top:10px;" onclick="loadMolds(false)">더 불러오기</button>
       </div>
     </div>
 
-    <!-- 2. PC 관리 · 엑셀 업로드 · BY-482BT 라벨 사이즈 조절 인쇄 -->
+    <!-- 2. 정보업로드 (엑셀) -->
     <div id="tabPc" class="hidden">
       <div class="card">
-        <h3 style="margin-top:0;">엑셀 금형 리스트 업로드 (CPH-301E 등 기존 양식 호환, .xlsx만 가능)</h3>
+        <h3 style="margin-top:0;">정보업로드 · 엑셀 금형 리스트</h3>
         <div class="row">
-          <input id="excelFile" type="file" accept=".xlsx" />
-          <button class="primary" onclick="uploadExcel()" style="flex:0 0 auto;">엑셀 업로드</button>
+          <input id="excelFile" type="file" accept=".xlsx" multiple />
+          <button id="btnUpload" class="primary" onclick="uploadExcel()" style="flex:0 0 auto;">엑셀 업로드</button>
         </div>
+        <pre id="uploadResult" class="result hidden"></pre>
+        <ul class="rules small muted">
+          <li>제목 줄 <b>#TYPE : CPH-302( 10 Series OHANE-PASSENGER CAR)</b> → 모델명 = <b>CPH-302</b>, 모델명2 = 괄호 안 내용</li>
+          <li>AJIN 번호가 있는 줄 1개 = 금형(코어) 1개 · 번호가 빈 아래 줄은 바로 위 금형의 <b>하위 품목</b>으로 저장</li>
+          <li>E~P열은 <b>상세정보</b>, TOOL LOCATION은 보관 위치로 저장 (합계 줄과 아래 비고는 제외)</li>
+          <li>같은 모델을 다시 올리면 갱신되고, 이미 이동한 위치·상태·메모·사진은 그대로 유지됩니다. (.xlsx만 가능)</li>
+        </ul>
       </div>
-
       <div class="card">
-        <h3 style="margin-top:0;">BY-482BT 유포감열지 QR 라벨 출력 (사이즈 조절 가능)</h3>
-        <div class="row" style="margin-bottom:10px;">
-          <select id="labelPreset" onchange="applyLabelPreset()">
-            <option value="80x50">금형 본체 80 × 50 mm (기본)</option>
-            <option value="50x30">코어/소형 50 × 30 mm</option>
-            <option value="40x20">초소형 코어 40 × 20 mm</option>
-            <option value="custom">직접 입력 (mm)</option>
-          </select>
-          <input id="labelW" type="number" value="80" min="15" max="110" placeholder="가로(mm)" />
-          <input id="labelH" type="number" value="50" min="15" max="150" placeholder="세로(mm)" />
-          <button class="primary" onclick="printSelectedLabels()" style="flex:0 0 auto;">선택 금형 라벨 인쇄</button>
+        <div class="row between">
+          <h3 style="margin:0;">업로드된 모델</h3>
+          <button class="mini" onclick="loadModels()" style="flex:0 0 auto;">새로고침</button>
         </div>
-        <p style="font-size:12px; color:var(--muted); margin:0;">
-          * 현장/검색 목록에서 체크박스로 금형을 선택한 뒤 [선택 금형 라벨 인쇄]를 누르세요. (인쇄 배율 100% 권장)
-        </p>
+        <div id="uploadedModels" style="margin-top:8px;"></div>
       </div>
     </div>
 
@@ -376,7 +391,6 @@
         <div class="row" style="justify-content:space-between;">
           <h3 style="margin:0;">설정</h3>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button onclick="openPasswordModal()">🔑 내 비밀번호 변경</button>
             <button onclick="resetSettings()">🔄 새로고침 (입력 초기화)</button>
           </div>
         </div>
@@ -438,8 +452,6 @@
 <div id="modalBack" class="hidden" onclick="if(event.target===this) closeModal()"><div id="modalBox"></div></div>
 <div id="qrFileHost" style="position:absolute; left:-9999px; top:0; width:320px;"></div>
 <div id="toast"></div>
-<!-- 인쇄 전용 영역 -->
-<div id="printArea"></div>
 
 <script>
 // 모든 /api/ 호출을 /api/index?__path=... 형태로 보내 Vercel 경로 처리와 무관하게 동작시킴
@@ -532,27 +544,36 @@ async function initSession() {
   const banner = document.getElementById("userBanner");
   banner.textContent = `작업자 이니셜: ${CURRENT_USER.initial} (${CURRENT_USER.full_name} / ${CURRENT_USER.role})`;
   banner.classList.remove("hidden");
-
   document.querySelectorAll(".actorLabel").forEach(el => el.textContent = CURRENT_USER.initial);
 
+  // 마스터설정은 마스터에게만 보이고, 정보업로드는 외부업체에게 보이지 않음
   if (CURRENT_USER.role === "master") {
     document.getElementById("btnTabMaster").classList.remove("hidden");
+  } else {
+    document.getElementById("btnTabMaster").remove();
+    document.getElementById("tabMaster")?.remove();
   }
   if (CURRENT_USER.role === "vendor") {
-    document.getElementById("btnTabPc").classList.add("hidden");
+    document.getElementById("btnTabPc").remove();
+    document.getElementById("tabPc")?.remove();
   }
 
   await loadLocations();
-  await loadMolds();
-  if (CURRENT_USER.role === "master") {
-    await loadAdminData();
-  }
+  await loadModels();
+  if (CURRENT_USER.role === "vendor") await loadMolds(true);
+  else renderMoldTable();
+  if (CURRENT_USER.role === "master") await loadAdminData();
 }
 
 function switchTab(tab) {
-  document.getElementById("tabField").classList.toggle("hidden", tab !== "field");
-  document.getElementById("tabPc").classList.toggle("hidden", tab !== "pc");
-  document.getElementById("tabMaster").classList.toggle("hidden", tab !== "master");
+  if (tab === "master" && (!CURRENT_USER || CURRENT_USER.role !== "master")) return;
+  if (tab === "pc" && (!CURRENT_USER || CURRENT_USER.role === "vendor")) return;
+  [["tabField", "field"], ["tabPc", "pc"], ["tabMaster", "master"]].forEach(([id, name]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("hidden", tab !== name);
+  });
+  document.querySelectorAll("#headerControls button[data-tab]").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  if (tab === "pc") loadModels();
 }
 
 async function loadLocations() {
@@ -563,16 +584,19 @@ async function loadLocations() {
   const filterSel = document.getElementById("filterLoc");
   const bulkSel = document.getElementById("bulkTargetLoc");
   const newUserLocSel = document.getElementById("newUserLoc");
+  const prevFilter = filterSel.value, prevBulk = bulkSel.value;
 
-  filterSel.innerHTML = '<option value="">전체 보관위치/업체</option>';
+  filterSel.innerHTML = '<option value="">전체 보관위치</option>';
   bulkSel.innerHTML = '<option value="">이동할 위치 선택</option>';
-  newUserLocSel.innerHTML = '<option value="">담당 보관위치/업체 선택</option>';
-
+  if (newUserLocSel) newUserLocSel.innerHTML = '<option value="">담당 보관위치/업체 선택</option>';
   locs.forEach(l => {
-    filterSel.innerHTML += `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`;
-    bulkSel.innerHTML += `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`;
-    newUserLocSel.innerHTML += `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`;
+    const opt = `<option value="${escapeHtml(l.name)}">${escapeHtml(l.name)}</option>`;
+    filterSel.innerHTML += opt;
+    bulkSel.innerHTML += opt;
+    if (newUserLocSel) newUserLocSel.innerHTML += opt;
   });
+  filterSel.value = prevFilter;
+  bulkSel.value = prevBulk;
 
   if (CURRENT_USER.role === "vendor" && CURRENT_USER.assigned_location) {
     filterSel.value = CURRENT_USER.assigned_location;
@@ -580,94 +604,185 @@ async function loadLocations() {
   }
 }
 
-async function loadMolds() {
-  const q = document.getElementById("searchInput").value.trim();
-  const wh = document.getElementById("filterLoc").value;
-  const params = new URLSearchParams({ q, warehouse: wh, limit: "100" });
-  const res = await fetch("/api/molds?" + params.toString(), {
-    headers: { "Authorization": "Bearer " + TOKEN }
-  });
+// ================= 금형 조회 =================
+const PAGE_SIZE = 100;
+let MODELS = [];
+let SELECTED_MODELS = new Set();
+let LIST = { offset: 0, total: 0, params: "", loaded: false };
+let LOAD_SEQ = 0;
+const DETAIL_CACHE = {};
+
+function esc(s) { return escapeHtml(s); }
+
+function fmtDt(s) {
+  if (!s) return "-";
+  const d = new Date(s);
+  if (isNaN(d)) return "-";
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+async function loadModels() {
+  const res = await fetch("/api/models", { headers: { "Authorization": "Bearer " + TOKEN } });
   const data = await safeJson(res);
-  CURRENT_MOLDS = data.items || [];
+  if (!res.ok) { toast(data.detail || "모델 목록을 불러오지 못했습니다."); return; }
+  MODELS = data.models || [];
+  const names = new Set(MODELS.map(m => m.model_name));
+  SELECTED_MODELS = new Set([...SELECTED_MODELS].filter(n => names.has(n)));
+  renderModelChips();
+  renderUploadedModels();
+}
+
+function renderModelChips() {
+  const box = document.getElementById("modelChips");
+  if (!MODELS.length) {
+    box.innerHTML = '<span class="muted">업로드된 모델이 없습니다. [정보업로드]에서 엑셀을 올려주세요.</span>';
+  } else {
+    box.innerHTML = MODELS.map((m, i) => `
+      <button class="mchip ${SELECTED_MODELS.has(m.model_name) ? "on" : ""}" onclick="toggleModel(${i})" title="${esc(m.model_name2)}">
+        <span>${esc(m.model_name)} <small>(${m.count})</small></span>
+        ${m.model_name2 ? `<span class="m2">${esc(m.model_name2)}</span>` : ""}
+      </button>`).join("");
+  }
+  document.getElementById("modelSelInfo").textContent =
+    SELECTED_MODELS.size ? `${SELECTED_MODELS.size}개 모델 선택됨` : "선택 없음 = 전체 모델에서 조회";
+}
+
+function toggleModel(i) {
+  const n = MODELS[i].model_name;
+  if (SELECTED_MODELS.has(n)) SELECTED_MODELS.delete(n); else SELECTED_MODELS.add(n);
+  renderModelChips();
+}
+
+function selectAllModels(on) {
+  SELECTED_MODELS = on ? new Set(MODELS.map(m => m.model_name)) : new Set();
+  renderModelChips();
+}
+
+function buildListParams() {
+  const p = new URLSearchParams();
+  [...SELECTED_MODELS].forEach(n => p.append("model", n));
+  const val = id => document.getElementById(id).value.trim();
+  const ajin = val("fAjin").replace(/^#/, "");
+  if (ajin) p.set("ajin", ajin);
+  if (val("fMold")) p.set("mold", val("fMold"));
+  if (val("fDw")) p.set("dw", val("fDw"));
+  if (val("fPart")) p.set("part", val("fPart"));
+  const wh = document.getElementById("filterLoc").value;
+  if (wh) p.set("warehouse", wh);
+  return p.toString();
+}
+
+async function loadMolds(reset = true, useSaved = false) {
+  const seq = ++LOAD_SEQ;
+  if (reset) {
+    if (!useSaved) LIST.params = buildListParams();
+    LIST.offset = 0;
+  }
+  const p = new URLSearchParams(LIST.params);
+  p.set("limit", PAGE_SIZE);
+  p.set("offset", LIST.offset);
+  document.getElementById("listInfo").textContent = "불러오는 중...";
+  const res = await fetch("/api/molds?" + p.toString(), { headers: { "Authorization": "Bearer " + TOKEN } });
+  const data = await safeJson(res);
+  if (seq !== LOAD_SEQ) return;
+  if (!res.ok) { renderMoldTable(); return alert(data.detail || "조회 실패"); }
+  CURRENT_MOLDS = reset ? (data.items || []) : CURRENT_MOLDS.concat(data.items || []);
+  LIST.total = data.total ?? CURRENT_MOLDS.length;
+  LIST.offset = CURRENT_MOLDS.length;
+  LIST.loaded = true;
   renderMoldTable();
 }
 
-function renderMoldTable() {
-  const box = document.getElementById("moldList");
-  if (!CURRENT_MOLDS.length) {
-    box.innerHTML = '<div class="muted" style="text-align:center; padding:16px;">조회된 금형이 없습니다.</div>';
-    return;
-  }
-  // 모델명 → 아진No 순으로 묶어서 표시 (같은 이름은 한 번만)
-  const models = new Map();
-  CURRENT_MOLDS.forEach(m => {
-    if (!models.has(m.model_name)) models.set(m.model_name, new Map());
-    const ajins = models.get(m.model_name);
-    if (!ajins.has(m.ajin_no)) ajins.set(m.ajin_no, []);
-    ajins.get(m.ajin_no).push(m);
-  });
-
-  let html = "";
-  models.forEach((ajins, model) => {
-    let total = 0;
-    ajins.forEach(rows => { total += rows.length; });
-    html += `<div class="grp-model"><span>${escapeHtml(model)}</span><small>${total}건</small></div>`;
-    ajins.forEach((rows, ajin) => {
-      const moldNos = [...new Set(rows.map(r => r.mold_no).filter(Boolean))];
-      const ids = rows.map(r => r.id).join(",");
-      html += `<div class="grp-ajin">
-        <div><strong>아진 #${escapeHtml(ajin)}</strong> <span class="muted">몰드 ${escapeHtml(moldNos.join(", "))}</span></div>
-        <button class="mini" onclick="addGroupToQueue('${ids}')">이 아진번호 전체 담기</button>
-      </div>`;
-      rows.forEach(m => {
-        const moldTag = moldNos.length > 1 ? `몰드 ${escapeHtml(m.mold_no)} · ` : "";
-        html += `<div class="mrow">
-          <input type="checkbox" class="moldChk" value="${m.id}" />
-          <div class="minfo">
-            <div><strong>${escapeHtml(m.part_description || "-")}</strong> <span class="muted">${escapeHtml(m.dw_no || "")}</span></div>
-            <div class="mmeta">${moldTag}<span class="pill">${escapeHtml(m.current_warehouse || "-")}</span>
-              ${escapeHtml(m.status_memo || "")} <small>(${escapeHtml(m.updated_by || "")})</small></div>
-          </div>
-          <div class="mbtns">
-            <button data-qid="${m.id}" onclick="toggleQueue(${m.id})">+이동담기</button>
-            <button onclick="openDetail(${m.id})">상세/사진</button>
-          </div>
-        </div>`;
-      });
-    });
-  });
-  box.innerHTML = html;
-  refreshQueueButtons();
+function resetFilters() {
+  ["fAjin", "fMold", "fDw", "fPart"].forEach(id => { document.getElementById(id).value = ""; });
+  const wh = document.getElementById("filterLoc");
+  if (!(CURRENT_USER && CURRENT_USER.role === "vendor")) wh.value = "";
+  SELECTED_MODELS = new Set();
+  renderModelChips();
+  LOAD_SEQ++;
+  CURRENT_MOLDS = [];
+  LIST = { offset: 0, total: 0, params: "", loaded: false };
+  if (CURRENT_USER && CURRENT_USER.role === "vendor") loadMolds(true);
+  else renderMoldTable();
+  toast("검색 조건을 초기화했습니다.");
 }
 
-function refreshQueueButtons() {
-  document.querySelectorAll("button[data-qid]").forEach(b => {
-    const queued = QUEUE.some(x => String(x.id) === b.dataset.qid);
-    b.textContent = queued ? "✕ 담기취소" : "+이동담기";
-    b.classList.toggle("queued", queued);
+async function refreshAll() {
+  await loadLocations();
+  await loadModels();
+  if (LIST.loaded) await loadMolds(true, true);
+  toast("새로고침 완료");
+}
+
+function moldRowHtml(m) {
+  return `<tr class="mr" data-qid="${m.id}">
+    <td class="idc" data-label="ID" onclick="toggleQueue(${m.id})" title="눌러서 선택/취소"><span class="idbox"></span><span class="idn">${m.id}</span></td>
+    <td data-label="모델명">${esc(m.model_name)}</td>
+    <td data-label="모델명2">${esc(m.model_name2)}</td>
+    <td data-label="AJIN No">#${esc(m.ajin_no)}</td>
+    <td data-label="D.W No">${esc(m.dw_no)}</td>
+    <td data-label="MOLD No">${esc(m.mold_no)}</td>
+    <td data-label="부품 설명">${esc(m.part_description)}${m.part_count > 1 ? ` <span class="pill">+하위 ${m.part_count - 1}</span>` : ""}</td>
+    <td data-label="보관 위치"><span class="pill">${esc(m.current_warehouse || "-")}</span></td>
+    <td data-label="금형/코어 상태"><div class="stwrap">
+      <strong>${esc(m.core_status)}</strong>
+      <div class="sbtns">
+        <button onclick="openItems(${m.id})">품목정보</button>
+        <button onclick="openDetail(${m.id})">상세정보</button>
+        <button onclick="openPhotos(${m.id})">사진정보</button>
+        <button onclick="openMemo(${m.id})">메모${m.status_memo ? " ●" : ""}</button>
+      </div></div></td>
+    <td data-label="최종 변경자">${esc(m.updated_by)}</td>
+  </tr>`;
+}
+
+function renderMoldTable() {
+  const tbody = document.getElementById("moldTableBody");
+  const info = document.getElementById("listInfo");
+  const more = document.getElementById("btnMore");
+  more.classList.add("hidden");
+  if (!LIST.loaded) {
+    tbody.innerHTML = '<tr><td class="empty" colspan="10">모델을 선택하고 [조회]를 누르세요. (선택 없이 조회하면 전체 모델에서 불러옵니다)</td></tr>';
+    info.textContent = "";
+    refreshSelection();
+    return;
+  }
+  if (!CURRENT_MOLDS.length) {
+    tbody.innerHTML = '<tr><td class="empty" colspan="10">조회된 금형이 없습니다.</td></tr>';
+    info.textContent = "총 0건";
+    refreshSelection();
+    return;
+  }
+  tbody.innerHTML = CURRENT_MOLDS.map(moldRowHtml).join("");
+  info.textContent = `총 ${LIST.total}건 중 ${CURRENT_MOLDS.length}건 표시`;
+  if (CURRENT_MOLDS.length < LIST.total) {
+    more.classList.remove("hidden");
+    more.textContent = `더 불러오기 (${LIST.total - CURRENT_MOLDS.length}건 남음)`;
+  }
+  refreshSelection();
+}
+
+// ---------- 선택(ID) / 이동 ----------
+function refreshSelection() {
+  document.getElementById("queueCount").textContent = QUEUE.length;
+  const sel = new Set(QUEUE.map(x => x.id));
+  document.querySelectorAll("tr[data-qid]").forEach(tr => {
+    const on = sel.has(Number(tr.dataset.qid));
+    tr.classList.toggle("sel", on);
+    const box = tr.querySelector(".idbox");
+    if (box) box.textContent = on ? "✓" : "";
   });
 }
 
 function toggleQueue(moldId) {
-  if (QUEUE.some(x => x.id === moldId)) removeFromQueue(moldId);
-  else addToQueue(moldId);
-}
-
-function addToQueue(moldId) {
-  const found = CURRENT_MOLDS.find(x => x.id === moldId);
-  if (!found || QUEUE.some(x => x.id === moldId)) return;
-  QUEUE.push(found);
+  const idx = QUEUE.findIndex(x => x.id === moldId);
+  if (idx >= 0) QUEUE.splice(idx, 1);
+  else {
+    const m = CURRENT_MOLDS.find(x => x.id === moldId);
+    if (m) QUEUE.push(m);
+  }
   renderQueue();
-}
-
-function addGroupToQueue(idsStr) {
-  let added = 0;
-  idsStr.split(",").map(Number).forEach(id => {
-    const found = CURRENT_MOLDS.find(x => x.id === id);
-    if (found && !QUEUE.some(x => x.id === id)) { QUEUE.push(found); added++; }
-  });
-  renderQueue();
-  toast(added ? `${added}건 담김 (총 ${QUEUE.length}건)` : "이미 모두 담겨 있습니다.");
 }
 
 function removeFromQueue(moldId) {
@@ -675,26 +790,33 @@ function removeFromQueue(moldId) {
   renderQueue();
 }
 
+function selectVisible() {
+  let added = 0;
+  CURRENT_MOLDS.forEach(m => { if (!QUEUE.some(x => x.id === m.id)) { QUEUE.push(m); added++; } });
+  renderQueue();
+  toast(added ? `${added}건 선택 (총 ${QUEUE.length}건)` : "이미 모두 선택되어 있습니다.");
+}
+
 function clearQueue(skipConfirm) {
-  if (!skipConfirm && QUEUE.length >= 2 && !confirm(`담긴 ${QUEUE.length}건을 모두 비울까요?`)) return;
+  if (!skipConfirm && QUEUE.length >= 2 && !confirm(`선택한 ${QUEUE.length}건을 모두 해제할까요?`)) return;
   QUEUE = [];
   renderQueue();
 }
 
 function renderQueue() {
-  document.getElementById("queueCount").textContent = QUEUE.length;
   const box = document.getElementById("queueList");
   if (!QUEUE.length) {
-    box.textContent = "스캔하거나 목록에서 '+이동담기'를 누르세요.";
+    box.textContent = "표의 ID를 누르면 선택/취소됩니다. 선택한 금형은 아진번호 단위로 한 번에 이동할 수 있습니다.";
   } else {
-    box.innerHTML = QUEUE.map(m => `<span class="chip">${escapeHtml(m.model_name)} #${escapeHtml(m.ajin_no)} · ${escapeHtml(m.part_description || m.mold_no)}
-      <button onclick="removeFromQueue(${m.id})" aria-label="담기 취소">✕</button></span>`).join("");
+    box.innerHTML = QUEUE.map(m => `<span class="chip">${esc(m.model_name)} #${esc(m.ajin_no)} · ${esc(m.part_description || m.mold_no)}
+      <button onclick="removeFromQueue(${m.id})" aria-label="선택 취소">✕</button></span>`).join("");
   }
-  refreshQueueButtons();
+  refreshSelection();
 }
 
 async function submitBulkMove() {
-  if (!QUEUE.length) return alert("이동할 금형이 없습니다.");
+  if (!QUEUE.length) return alert("이동할 금형을 먼저 선택하세요. (표의 ID를 누르면 선택됩니다)");
+  if (QUEUE.length > 300) return alert("한 번에 최대 300건까지 이동할 수 있습니다.");
   const toWarehouse = document.getElementById("bulkTargetLoc").value;
   if (!toWarehouse) return alert("이동할 위치(업체/창고)를 선택하세요.");
 
@@ -710,69 +832,142 @@ async function submitBulkMove() {
   });
   const data = await safeJson(res);
   if (!res.ok) return alert(data.detail || "이동 실패");
-  alert(data.message);
+  toast(data.message);
   document.getElementById("bulkMemo").value = "";
+  document.getElementById("bulkStatus").value = "";
   clearQueue(true);
-  await loadMolds();
+  Object.keys(DETAIL_CACHE).forEach(k => delete DETAIL_CACHE[k]);
+  if (LIST.loaded) await loadMolds(true, true);
+  if (CURRENT_USER.role === "vendor") await loadModels();
 }
 
-async function openDetail(moldId) {
-  CURRENT_DETAIL_MOLD_ID = moldId;
-  const res = await fetch(`/api/molds/${moldId}`, { headers: { "Authorization": "Bearer " + TOKEN } });
+// ---------- 금형별 창 (품목정보 / 상세정보 / 사진정보 / 메모) ----------
+let MODAL_SEQ = 0;
+
+async function getDetail(id, force) {
+  const c = DETAIL_CACHE[id];
+  if (!force && c && Date.now() - c.t < 5 * 60 * 1000) return c.data;
+  const res = await fetch(`/api/molds/${id}`, { headers: { "Authorization": "Bearer " + TOKEN } });
   const data = await safeJson(res);
-  if (!res.ok) return alert(data.detail || "조회 실패");
-
-  const m = data.mold;
-  document.getElementById("detailCard").classList.remove("hidden");
-  document.getElementById("detailTitle").textContent = `${m.model_name} #${m.ajin_no} (${m.mold_no})`;
-  document.getElementById("detailMeta").textContent =
-    `품명: ${m.part_description || "-"} | 보관위치: ${m.current_warehouse || "-"} | 상태: ${m.core_status || "-"} | 최종기록: ${m.updated_by || "-"}`;
-  document.getElementById("detailStatusInput").value = m.core_status || "정상";
-  document.getElementById("detailMemoInput").value = m.status_memo || "";
-
-  const photoDiv = document.getElementById("photoList");
-  const photos = data.photos || [];
-  photoDiv.innerHTML = photos.length
-    ? photos.map(p => `
-        <div class="photo-card">
-          <a href="${p.public_url}" target="_blank"><img src="${p.public_url}" loading="lazy" /></a>
-          <div><strong>${escapeHtml(p.uploaded_by)}</strong> · ${p.file_size_kb}KB</div>
-          <div style="color:var(--muted)">${new Date(p.uploaded_at).toLocaleString()}</div>
-        </div>
-      `).join("")
-    : '<div style="color:var(--muted); font-size:13px;">등록된 사진이 없습니다.</div>';
-
-  const histUl = document.getElementById("historyList");
-  const hist = data.history || [];
-  histUl.innerHTML = hist.length
-    ? hist.map(h => `<li>[${new Date(h.created_at).toLocaleString()}] <strong>${escapeHtml(h.actor_initial)}</strong>: ${escapeHtml(h.from_warehouse || "-")} → ${escapeHtml(h.to_warehouse || "-")} ${h.memo ? "/ " + escapeHtml(h.memo) : ""}</li>`).join("")
-    : "<li>이력이 없습니다.</li>";
+  if (!res.ok) throw new Error(data.detail || "조회 실패");
+  DETAIL_CACHE[id] = { t: Date.now(), data };
+  return data;
 }
 
-async function saveDetailMemo() {
-  if (!CURRENT_DETAIL_MOLD_ID) return;
-  const res = await fetch(`/api/molds/${CURRENT_DETAIL_MOLD_ID}/memo`, {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({
-      memo: document.getElementById("detailMemoInput").value,
-      core_status: document.getElementById("detailStatusInput").value
-    })
-  });
-  const data = await safeJson(res);
-  if (!res.ok) return alert(data.detail || "저장 실패");
-  alert(data.message);
-  await openDetail(CURRENT_DETAIL_MOLD_ID);
-  await loadMolds();
+function setModalBody(html) {
+  const el = document.getElementById("modalBody");
+  if (el) el.innerHTML = html;
+}
+
+function moldHead(m) {
+  return `<div class="mh"><strong>#${esc(m.ajin_no)}</strong> · ${esc(m.model_name)} <span class="muted">${esc(m.model_name2)}</span><br>
+    <span class="muted">MOLD ${esc(m.mold_no)} · D.W ${esc(m.dw_no || "-")} · ${esc(m.current_warehouse || "-")}</span><br>${esc(m.part_description)}</div>`;
+}
+
+async function openMoldWindow(id, title, wide, renderFn, force) {
+  const seq = ++MODAL_SEQ;
+  openModal(title, '<div class="muted" style="padding:14px;">불러오는 중...</div>', null, "", wide);
+  try {
+    const d = await getDetail(id, force);
+    if (seq !== MODAL_SEQ) return null;
+    setModalBody(moldHead(d.mold) + renderFn(d));
+    return d;
+  } catch (e) {
+    if (seq === MODAL_SEQ) setModalBody(`<div style="color:#b91c1c; padding:10px;">${esc(e.message || e)}</div>`);
+    return null;
+  }
+}
+
+function openItems(id) {
+  openMoldWindow(id, "품목정보", true, d => {
+    const parts = d.parts || [];
+    if (!parts.length) return '<div class="muted">등록된 품목이 없습니다.</div>';
+    return `<div class="muted small" style="margin-bottom:6px;">총 ${parts.length}개 품목 (첫 줄이 대표 품목)</div>
+      <div class="tblwrap"><table class="mini-t"><thead><tr><th>#</th><th>D.W No</th><th>MOLD No</th><th>부품 설명</th><th>수량</th></tr></thead><tbody>` +
+      parts.map((p, i) => `<tr class="${i === 0 ? "main" : ""}"><td>${i + 1}</td><td>${esc(p.dw_no)}</td><td>${esc(p.mold_no)}</td><td>${esc(p.part_description)}</td><td>${esc(p.qty)}</td></tr>`).join("") +
+      "</tbody></table></div>";
+  }, false);
+}
+
+function openDetail(id) {
+  openMoldWindow(id, "상세정보", false, d => {
+    const det = d.mold.details || [];
+    if (!det.length) return '<div class="muted">등록된 상세정보가 없습니다.</div>';
+    return "<dl class=\"kv\">" + det.map(x => `<dt>${esc(x.label)}</dt><dd>${esc(x.value)}</dd>`).join("") + "</dl>";
+  }, false);
+}
+
+// 사진정보: 촬영일 순 썸네일 → 눌러서 크게 확인
+let PHOTO_STATE = { moldId: null, photos: [], order: "desc", sel: null };
+
+async function openPhotos(id) {
+  PHOTO_STATE = { moldId: id, photos: [], order: "desc", sel: null };
+  const d = await openMoldWindow(id, "사진정보", true, dd => {
+    PHOTO_STATE.photos = dd.photos || [];
+    return `<div class="row between" style="margin:4px 0 8px;">
+        <span id="photoCount" class="muted"></span>
+        <button class="mini" id="btnPhotoSort" onclick="togglePhotoSort()" style="flex:0 0 auto;"></button>
+      </div>
+      <div id="photoView" class="photoview hidden"></div>
+      <div id="photoGrid" class="thumbs"></div>
+      <div class="row" style="margin-top:12px;">
+        <label class="upl">📷 촬영하기<input type="file" accept="image/*" capture="environment" onchange="uploadPhoto(this)"></label>
+        <label class="upl alt">🖼️ 앨범에서 선택<input type="file" accept="image/*" onchange="uploadPhoto(this)"></label>
+      </div>`;
+  }, true);
+  if (d) renderPhotoGrid();
+}
+
+function sortedPhotos() {
+  const arr = PHOTO_STATE.photos.slice();
+  arr.sort((a, b) => new Date(a.taken_at) - new Date(b.taken_at));
+  if (PHOTO_STATE.order === "desc") arr.reverse();
+  return arr;
+}
+
+function renderPhotoGrid() {
+  const grid = document.getElementById("photoGrid");
+  if (!grid) return;
+  const arr = sortedPhotos();
+  document.getElementById("photoCount").textContent = `사진 ${arr.length}장`;
+  document.getElementById("btnPhotoSort").textContent = PHOTO_STATE.order === "desc" ? "촬영일 최신순 ▼" : "촬영일 오래된순 ▲";
+  grid.innerHTML = arr.length
+    ? arr.map(p => `<button class="thumb ${PHOTO_STATE.sel === p.id ? "on" : ""}" onclick="showPhoto(${p.id})">
+        <img loading="lazy" src="${esc(p.thumb_url || p.public_url)}" alt=""><span>${esc(fmtDt(p.taken_at))}</span></button>`).join("")
+    : '<div class="muted" style="grid-column:1/-1;">등록된 사진이 없습니다. 아래 버튼으로 촬영하거나 앨범에서 올려주세요.</div>';
+}
+
+function togglePhotoSort() {
+  PHOTO_STATE.order = PHOTO_STATE.order === "desc" ? "asc" : "desc";
+  renderPhotoGrid();
+}
+
+function showPhoto(pid) {
+  const p = PHOTO_STATE.photos.find(x => x.id === pid);
+  const v = document.getElementById("photoView");
+  if (!p || !v) return;
+  PHOTO_STATE.sel = pid;
+  v.classList.remove("hidden");
+  v.innerHTML = `<img src="${esc(p.public_url)}" alt="">
+    <div class="small" style="margin:6px 0;">촬영 ${esc(fmtDt(p.taken_at))} · ${esc(p.uploaded_by)} · ${p.file_size_kb}KB</div>
+    <div class="row between"><a href="${esc(p.public_url)}" target="_blank" rel="noopener">원본 열기</a>
+    <button class="mini" onclick="hidePhoto()" style="flex:0 0 auto;">미리보기 닫기</button></div>`;
+  renderPhotoGrid();
+}
+
+function hidePhoto() {
+  PHOTO_STATE.sel = null;
+  const v = document.getElementById("photoView");
+  if (v) { v.classList.add("hidden"); v.innerHTML = ""; }
+  renderPhotoGrid();
 }
 
 async function compressImage(file, maxSide = 1280, quality = 0.72) {
   try {
     const bmp = await createImageBitmap(file);
-    let w = bmp.width, h = bmp.height;
-    const scale = Math.min(1, maxSide / Math.max(w, h));
-    w = Math.max(1, Math.round(w * scale));
-    h = Math.max(1, Math.round(h * scale));
+    const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
     const canvas = document.createElement("canvas");
     canvas.width = w; canvas.height = h;
     canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
@@ -783,14 +978,55 @@ async function compressImage(file, maxSide = 1280, quality = 0.72) {
   }
 }
 
+// JPEG의 EXIF 촬영일시(DateTimeOriginal) 읽기. 없으면 null
+async function readExifDate(file) {
+  try {
+    const v = new DataView(await file.slice(0, 131072).arrayBuffer());
+    if (v.byteLength < 12 || v.getUint16(0) !== 0xFFD8) return null;
+    let off = 2;
+    while (off + 4 < v.byteLength) {
+      const marker = v.getUint16(off), len = v.getUint16(off + 2);
+      if (marker === 0xFFE1 && v.getUint32(off + 4) === 0x45786966) {
+        const tiff = off + 10;
+        const le = v.getUint16(tiff) === 0x4949;
+        const g16 = o => v.getUint16(o, le), g32 = o => v.getUint32(o, le);
+        const findTag = (ifd, tag) => {
+          const n = g16(ifd);
+          for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (g16(e) === tag) return e; }
+          return -1;
+        };
+        const ptr = findTag(tiff + g32(tiff + 4), 0x8769);
+        if (ptr < 0) return null;
+        const exifIfd = tiff + g32(ptr + 8);
+        let e = findTag(exifIfd, 0x9003);
+        if (e < 0) e = findTag(exifIfd, 0x9004);
+        if (e < 0) return null;
+        const so = tiff + g32(e + 8);
+        let s = "";
+        for (let i = 0; i < 19; i++) s += String.fromCharCode(v.getUint8(so + i));
+        const m = s.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+        if (!m || +m[1] < 2000) return null;
+        return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).toISOString();
+      }
+      off += 2 + len;
+    }
+  } catch (e) {}
+  return null;
+}
+
 async function uploadPhoto(inputEl) {
-  if (!CURRENT_DETAIL_MOLD_ID || !inputEl.files.length) return;
+  const id = PHOTO_STATE.moldId;
+  if (!id || !inputEl.files.length) return;
+  const orig = inputEl.files[0];
   toast("사진 압축/업로드 중...");
   try {
-    const small = await compressImage(inputEl.files[0]);
+    const small = await compressImage(orig);
     const fd = new FormData();
     fd.append("file", small, "photo.jpg");
-    const res = await fetch(`/api/molds/${CURRENT_DETAIL_MOLD_ID}/photos`, {
+    const taken = (await readExifDate(orig)) ||
+      (orig.lastModified && orig.lastModified > 946684800000 ? new Date(orig.lastModified).toISOString() : null);
+    if (taken) fd.append("taken_at", taken);
+    const res = await fetch(`/api/molds/${id}/photos`, {
       method: "POST",
       headers: { "Authorization": "Bearer " + TOKEN },
       body: fd
@@ -799,14 +1035,57 @@ async function uploadPhoto(inputEl) {
     inputEl.value = "";
     if (!res.ok) return alert(data.detail || "사진 업로드 실패");
     toast(data.message || "사진 업로드 완료");
-    await openDetail(CURRENT_DETAIL_MOLD_ID);
+    const d = await getDetail(id, true);
+    if (PHOTO_STATE.moldId === id) { PHOTO_STATE.photos = d.photos || []; renderPhotoGrid(); }
   } catch (e) {
     inputEl.value = "";
     alert("사진 업로드 중 오류: " + e);
   }
 }
 
-// QR 스캐너 (QR 값 예: MOLD:12 또는 모델명|아진No|몰드No)
+// 메모: 금형 상태를 적어 저장하고, 쌓인 기록을 열람
+let MEMO_ID = null;
+
+function memoHtml(d) {
+  const memos = (d.memos || []).map(x => `<li><b>${esc(x.actor_initial)}</b> <span class="muted">${esc(fmtDt(x.created_at))}</span>
+      ${x.core_status ? `<span class="pill">${esc(x.core_status)}</span>` : ""}<div>${esc(x.memo)}</div></li>`).join("");
+  const moves = (d.history || []).map(h => `<li><b>${esc(h.actor_initial)}</b> <span class="muted">${esc(fmtDt(h.created_at))}</span>
+      ${esc(h.from_warehouse || "-")} → ${esc(h.to_warehouse || "-")}${h.memo ? " · " + esc(h.memo) : ""}</li>`).join("");
+  return `<div class="fld"><span>금형/코어 상태</span><input id="memoStatus" type="text" value="${esc(d.mold.core_status)}" placeholder="예: 정상, 11차, 수리요청"></div>
+    <div class="fld"><span>메모 (금형 상태 · 특이사항)</span><textarea id="memoText" rows="3" placeholder="내용을 입력하고 저장하세요"></textarea></div>
+    <div class="btnrow" style="margin:0 0 6px;"><button class="primary" onclick="saveMemo()">💾 메모 저장 (${esc(CURRENT_USER.initial)})</button></div>
+    <h4 style="margin:12px 0 2px;">메모 기록</h4><ul class="log">${memos || '<li class="muted">저장된 메모가 없습니다.</li>'}</ul>
+    <h4 style="margin:12px 0 2px;">이동 이력</h4><ul class="log">${moves || '<li class="muted">이동 이력이 없습니다.</li>'}</ul>`;
+}
+
+function openMemo(id) {
+  MEMO_ID = id;
+  openMoldWindow(id, "메모", true, memoHtml, true);
+}
+
+async function saveMemo() {
+  const id = MEMO_ID;
+  if (!id) return;
+  const memo = document.getElementById("memoText").value.trim();
+  const status = document.getElementById("memoStatus").value.trim();
+  if (!memo && !status) return alert("메모 또는 상태를 입력해 주세요.");
+  const res = await fetch(`/api/molds/${id}/memo`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ memo, core_status: status || null })
+  });
+  const data = await safeJson(res);
+  if (!res.ok) return alert(data.detail || "저장 실패");
+  toast(data.message || "저장 완료");
+  const d = await getDetail(id, true);
+  const row = CURRENT_MOLDS.find(x => x.id === id);
+  if (row) {
+    Object.assign(row, { core_status: d.mold.core_status, status_memo: d.mold.status_memo, updated_by: d.mold.updated_by, updated_at: d.mold.updated_at });
+    renderMoldTable();
+  }
+  if (MEMO_ID === id) setModalBody(moldHead(d.mold) + memoHtml(d));
+}
+
 function cameraHelpMessage(e) {
   const ua = navigator.userAgent || "";
   const inApp = /KAKAOTALK|NAVER|Line\/|FBAN|FBAV|Instagram|DaumApps/i.test(ua);
@@ -941,76 +1220,74 @@ async function handleScannedQr(text, force) {
   }
   if (SCAN_MODE === "photo" || SCAN_MODE === "both") {
     await stopScanner();
-    await openDetail(target.id);
+    await openPhotos(target.id);
   }
 }
 
-// 엑셀 업로드
+// 엑셀 업로드 (정보업로드) - 여러 파일을 차례로 올립니다
 async function uploadExcel() {
   const fileInput = document.getElementById("excelFile");
-  if (!fileInput.files.length) return alert("엑셀 파일(.xlsx)을 선택하세요.");
-  const btn = document.querySelector("#tabPc button.primary");
-  const fd = new FormData();
-  fd.append("file", fileInput.files[0]);
-  if (btn) { btn.disabled = true; btn.textContent = "업로드 중..."; }
+  const files = Array.from(fileInput.files);
+  if (!files.length) return alert("엑셀 파일(.xlsx)을 선택하세요.");
+  const btn = document.getElementById("btnUpload");
+  const out = document.getElementById("uploadResult");
+  const lines = [];
+  btn.disabled = true;
+  out.classList.add("hidden");
   try {
-    const res = await fetch("/api/molds/upload-excel", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + TOKEN },
-      body: fd
-    });
-    const data = await safeJson(res);
-    if (!res.ok) return alert(data.detail || "업로드 실패");
-    alert(data.message);
+    for (let i = 0; i < files.length; i++) {
+      btn.textContent = `업로드 중... (${i + 1}/${files.length})`;
+      try {
+        const fd = new FormData();
+        fd.append("file", files[i]);
+        const res = await fetch("/api/molds/upload-excel", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + TOKEN },
+          body: fd
+        });
+        const data = await safeJson(res);
+        lines.push(`📄 ${files[i].name}\n` + (res.ok ? data.message : "❌ " + (data.detail || "업로드 실패")));
+      } catch (e) {
+        lines.push(`📄 ${files[i].name}\n❌ 업로드 중 오류: ${e}`);
+      }
+    }
+    out.textContent = lines.join("\n\n");
+    out.classList.remove("hidden");
     fileInput.value = "";
+    Object.keys(DETAIL_CACHE).forEach(k => delete DETAIL_CACHE[k]);
     await loadLocations();
-    await loadMolds();
-  } catch (e) {
-    alert("업로드 중 오류: " + e);
+    await loadModels();
+    if (LIST.loaded) await loadMolds(true, true);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = "엑셀 업로드"; }
+    btn.disabled = false; btn.textContent = "엑셀 업로드";
   }
 }
 
-// BY-482BT 라벨 사이즈 조절 및 인쇄
-function applyLabelPreset() {
-  const preset = document.getElementById("labelPreset").value;
-  if (preset === "80x50") { labelW.value = 80; labelH.value = 50; }
-  else if (preset === "50x30") { labelW.value = 50; labelH.value = 30; }
-  else if (preset === "40x20") { labelW.value = 40; labelH.value = 20; }
+function renderUploadedModels() {
+  const box = document.getElementById("uploadedModels");
+  if (!box) return;
+  const isMaster = CURRENT_USER && CURRENT_USER.role === "master";
+  box.innerHTML = MODELS.length
+    ? MODELS.map((m, i) => `<div class="locrow">
+        <div><strong>${esc(m.model_name)}</strong> <span class="muted">${esc(m.model_name2)}</span> <span class="pill">${m.count}건</span></div>
+        ${isMaster ? `<div class="locbtns"><button class="mini danger" onclick="deleteModel(${i})">삭제</button></div>` : ""}
+      </div>`).join("")
+    : '<span class="muted">업로드된 모델이 없습니다.</span>';
 }
 
-function printSelectedLabels() {
-  const checkedIds = Array.from(document.querySelectorAll(".moldChk:checked")).map(el => Number(el.value));
-  const targets = checkedIds.length ? CURRENT_MOLDS.filter(m => checkedIds.includes(m.id)) : QUEUE;
-  if (!targets.length) return alert("인쇄할 금형을 체크하거나 이동목록에 담아주세요.");
-
-  const w = Number(document.getElementById("labelW").value) || 80;
-  const h = Number(document.getElementById("labelH").value) || 50;
-  const qrMm = Math.max(12, Math.min(w * 0.45, h - 6));
-
-  const printArea = document.getElementById("printArea");
-  printArea.style.setProperty("--label-w", `${w}mm`);
-  printArea.style.setProperty("--label-h", `${h}mm`);
-  printArea.style.setProperty("--qr-size", `${qrMm}mm`);
-
-  printArea.innerHTML = targets.map(m => {
-    const qrPayload = encodeURIComponent(`MOLD:${m.id}`);
-    const qrImgUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrPayload}`;
-    return `
-      <div class="label-sheet">
-        <div class="label-qr"><img src="${qrImgUrl}" /></div>
-        <div class="label-text">
-          <div class="label-title">${escapeHtml(m.model_name)} #${escapeHtml(m.ajin_no)}</div>
-          <div><strong>${escapeHtml(m.mold_no)}</strong></div>
-          <div>${escapeHtml(m.part_description || "")} ${escapeHtml(m.dw_no || "")}</div>
-          <div style="font-size:7.5pt;">${escapeHtml(m.current_warehouse || "")}</div>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  setTimeout(() => window.print(), 300);
+async function deleteModel(i) {
+  const m = MODELS[i];
+  if (!m || !confirm(`모델 '${m.model_name}' 을(를) 삭제할까요?\n금형 ${m.count}건과 그에 딸린 품목·사진·메모·이동이력이 모두 삭제되며 되돌릴 수 없습니다.`)) return;
+  const res = await fetch("/api/admin/models?name=" + encodeURIComponent(m.model_name), { method: "DELETE", headers: authHeaders() });
+  const data = await safeJson(res);
+  if (!res.ok) return alert(data.detail || "삭제 실패");
+  toast(data.message || "삭제 완료");
+  SELECTED_MODELS.delete(m.model_name);
+  QUEUE = QUEUE.filter(x => x.model_name !== m.model_name);
+  Object.keys(DETAIL_CACHE).forEach(k => delete DETAIL_CACHE[k]);
+  await loadModels();
+  renderQueue();
+  if (LIST.loaded) await loadMolds(true, true);
 }
 
 // 마스터 설정 기능
@@ -1018,22 +1295,28 @@ let ADMIN_USERS = [];
 let ADMIN_LOCS = [];
 let MODAL_SAVE = null;
 
-function openModal(title, bodyHtml, onSave, saveLabel) {
+function openModal(title, bodyHtml, onSave, saveLabel, wide) {
   MODAL_SAVE = onSave;
-  document.getElementById("modalBox").innerHTML =
-    `<h3 style="margin:0 0 10px;">${escapeHtml(title)}</h3>${bodyHtml}
-     <div class="row" style="margin-top:12px;">
-       <button onclick="closeModal()">취소</button>
-       <button class="primary" onclick="MODAL_SAVE && MODAL_SAVE()">${escapeHtml(saveLabel || "저장")}</button>
+  const box = document.getElementById("modalBox");
+  box.className = wide ? "wide" : "";
+  box.innerHTML =
+    `<div class="mhead"><h3>${escapeHtml(title)}</h3><button class="mini" onclick="closeModal()" style="flex:0 0 auto;">✕ 닫기</button></div>
+     <div id="modalBody">${bodyHtml}</div>
+     <div class="mfoot">
+       ${onSave ? `<button class="primary" onclick="MODAL_SAVE && MODAL_SAVE()">${escapeHtml(saveLabel || "저장")}</button>` : ""}
+       <button onclick="closeModal()">닫기</button>
      </div>`;
   document.getElementById("modalBack").classList.remove("hidden");
 }
 
 function closeModal() {
   MODAL_SAVE = null;
+  MODAL_SEQ++;
   document.getElementById("modalBack").classList.add("hidden");
   document.getElementById("modalBox").innerHTML = "";
 }
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
 
 async function loadAdminData() {
   const [locRes, usrRes] = await Promise.all([
@@ -1209,31 +1492,6 @@ async function deleteLoc(id) {
   toast(data.message || "삭제 완료");
   await loadLocations();
   await loadAdminData();
-}
-
-function openPasswordModal() {
-  openModal("내 비밀번호 변경", `
-    <div class="fld"><span>현재 비밀번호</span><input id="pw_cur" type="password" autocomplete="current-password"></div>
-    <div class="fld"><span>새 비밀번호 (4자 이상, 6자 이상 권장)</span><input id="pw_new" type="password" autocomplete="new-password"></div>
-    <div class="fld"><span>새 비밀번호 확인</span><input id="pw_new2" type="password" autocomplete="new-password"></div>
-  `, savePassword, "변경");
-}
-
-async function savePassword() {
-  const cur = document.getElementById("pw_cur").value;
-  const nw = document.getElementById("pw_new").value;
-  const nw2 = document.getElementById("pw_new2").value;
-  if (!cur || !nw) return alert("현재 비밀번호와 새 비밀번호를 입력하세요.");
-  if (nw !== nw2) return alert("새 비밀번호 확인이 일치하지 않습니다.");
-  const res = await fetch("/api/auth/change-password", {
-    method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ current_password: cur, new_password: nw })
-  });
-  const data = await safeJson(res);
-  if (!res.ok) return alert(data.detail || "변경 실패");
-  closeModal();
-  alert(data.message || "비밀번호가 변경되었습니다.");
 }
 
 // 설정 화면 새로고침: 입력한 내용을 모두 비우고 목록을 다시 불러옴
